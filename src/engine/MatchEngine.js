@@ -20,42 +20,107 @@ export class MatchEngine {
   constructor(homeTeam, awayTeam) {
     this.homeTeam = homeTeam;
     this.awayTeam = awayTeam;
-    
+    this.receivedFirstHalf = null;
+
     this.state = {
       quarter: 1,
-      timeRemaining: 900, // 15 mins in seconds
+      timeRemaining: 900, 
       down: 1,
       distance: 10,
-      ballOn: 20, // 0-100 scale. 0 = Own Endzone, 100 = Opponent Endzone
-      possession: 'home', // 'home' or 'away'
+      ballOn: 25, 
+      possession: 'home', 
       homeScore: 0,
       awayScore: 0,
       log: [],
       gameOver: false,
     };
+    
+    this.performCoinToss();
+  }
+
+  performCoinToss() {
+      // 50/50 Coin Toss
+      const homeWon = Math.random() > 0.5;
+      const winner = homeWon ? this.homeTeam : this.awayTeam;
+      // Winner elects to receive in Q1 (Simplicity)
+      this.state.possession = homeWon ? 'home' : 'away';
+      this.receivedFirstHalf = homeWon ? 'home' : 'away'; // Track for Q3 flip
+      const receiver = homeWon ? this.homeTeam : this.awayTeam;
+      
+      this.state.ballOn = 25; // Touchback start
+      // Note: We can't log here easily because logs show Q1 15:00.
+      // We'll trust the UI can show who has ball.
+  }
+
+  startOvertimeCoinToss() {
+      const homeWon = Math.random() > 0.5;
+      this.state.possession = homeWon ? 'home' : 'away';
+      this.state.ballOn = 25;
+      this.addToLog(`Overtime Coin Toss: ${homeWon ? this.homeTeam.name : this.awayTeam.name} wins and receives!`);
   }
 
   // Helper to flip field
   changePossession(type = 'punt') {
-    // types: 'kickoff', 'punt', 'downs', 'turnover', 'score'
+    // types: 'kickoff', 'punt', 'downs', 'turnover', 'score', 'safety_kick'
+    
+    // Safety Kick: Kicking team sets up at 20. Punts/Kicks. 
+    // Usually good field position for returner.
+    if (type === 'safety_kick') {
+        this.addToLog(`Free Kick after Safety from ${this.getOffenseTeam().abbreviation}.`);
+        this.state.ballOn = 45; // Receiving team (new possession) gets it at Own 45
+    }
+
     this.state.possession = this.state.possession === 'home' ? 'away' : 'home';
     this.state.down = 1;
     this.state.distance = 10;
     
+    // Default Flip (Downs, Turnover)
+    let newLoc = 100 - this.state.ballOn;
+
     if (type === 'kickoff' || type === 'score') {
-      this.state.ballOn = 25; // Touchback logic
+      newLoc = 25; // Touchback 
       this.addToLog(`Kickoff! ${this.getOffenseTeam().abbreviation} starts at their own 25.`);
+    } else if (type === 'safety_kick') {
+      // Logic handled above (set to 45) but we must respect it
+      newLoc = 45;
     } else if (type === 'punt') {
-      const puntDist = 40 + Math.floor(Math.random() * 15); // Better punt logic
-      let newLoc = (100 - this.state.ballOn) + puntDist;
-      if (newLoc > 100) newLoc = 80; 
-      this.state.ballOn = 100 - newLoc; 
-      this.addToLog(`Punt! ${this.getOffenseTeam().abbreviation} takes over at their ${Math.round(this.state.ballOn)}.`);
-    } else if (type === 'downs' || type === 'turnover') {
-      // Ball stays at same spot, just flipped perspective
-      this.state.ballOn = 100 - this.state.ballOn;
-      this.addToLog(`${this.getOffenseTeam().abbreviation} takes over at their ${Math.round(this.state.ballOn)}.`);
+      const puntDist = 35 + Math.floor(Math.random() * 25); // 35-60 yds
+      const rawLoc = (100 - this.state.ballOn) + puntDist; 
+      
+      if (rawLoc > 100) {
+          // Touchback
+          newLoc = 20;
+          this.addToLog("Punt bounces into Endzone. Touchback.");
+      } else if (rawLoc >= 95) {
+          // Coffin Corner (Pin Deep)
+          newLoc = 100 - rawLoc; // e.g. 98 -> 2yd line (Wait: 100-98 = 2. Correct logic is 100 - rawLoc IS 2 from their goal?)
+          // Wait: 
+          // Kicking team at 50. Punt 48 yds. rawLoc = 98 (2 yds from endzone).
+          // Field Flip: 100 - 98 = 2. 
+          // Correct.
+          this.addToLog(`Perfect Punt! Ball downed at the ${Math.round(100-rawLoc)} yard line!`);
+          newLoc = 100 - rawLoc;
+      } else {
+          // Muffed Catch Chance (5%)
+          if (Math.random() < 0.05) {
+               this.addToLog("MUFFED PUNT! Recovered by Kicking Team!");
+               // Revert possession change
+               this.state.possession = this.state.possession === 'home' ? 'away' : 'home';
+               this.state.ballOn = rawLoc; // Recover at landing spot (e.g. 80)
+               this.state.down = 1; this.state.distance = 10;
+               return; // Exit
+          }
+
+          let returnYards = Math.floor(Math.random() * 12);
+          newLoc = (100 - rawLoc) + returnYards;
+          this.addToLog(`Punt returned ${returnYards} yds to ${Math.round(newLoc)}.`);
+      }
+    } 
+    else if (type === 'downs' || type === 'turnover') {
+         this.addToLog(`${this.getOffenseTeam().abbreviation} takes over at their ${Math.round(newLoc)}.`);
     }
+    
+    this.state.ballOn = newLoc;
   }
 
   getOffenseTeam() { return this.state.possession === 'home' ? this.homeTeam : this.awayTeam; }
@@ -219,7 +284,13 @@ export class MatchEngine {
       
       this.addToLog(description + ` (${yardsGained} yds)`);
 
-      if (this.state.ballOn >= 100 || touchdown) {
+      // SAFETY CHECK
+      if (this.state.ballOn <= 0) {
+          this.scoreDefense(2);
+          this.addToLog("SAFETY! Tackled in the endzone!");
+          this.changePossession('safety_kick');
+      }
+      else if (this.state.ballOn >= 100 || touchdown) {
         this.score(7);
         this.addToLog(`TOUCHDOWN ${off.abbreviation}!`);
         this.changePossession('score');
@@ -244,32 +315,74 @@ export class MatchEngine {
   score(points) {
     if (this.state.possession === 'home') this.state.homeScore += points;
     else this.state.awayScore += points;
+    
+    if (this.state.quarter > 4) {
+        this.addToLog("OT Score! Game Over!");
+        this.state.gameOver = true;
+    }
   }
 
   scoreDefense(points) {
     if (this.state.possession === 'home') this.state.awayScore += points;
     else this.state.homeScore += points;
+    
+    if (this.state.quarter > 4) {
+        this.addToLog("OT Score! Game Over!");
+        this.state.gameOver = true;
+    }
   }
 
   tickClock() {
+    if (this.state.gameOver) return;
+
     const timeBurn = 30 + Math.floor(Math.random() * 15);
     this.state.timeRemaining -= timeBurn;
 
     if (this.state.timeRemaining <= 0) {
+      // Quarter Change
       if (this.state.quarter < 4) {
-        this.state.quarter++;
-        this.state.timeRemaining = 900;
-        this.addToLog(`End of Quarter ${this.state.quarter - 1}`);
+         
+         const oldQ = this.state.quarter;
+         this.state.quarter++;
+         this.state.timeRemaining = 900;
+         this.addToLog(`End of Quarter ${oldQ}`);
+         
+         // HALFTIME LOGIC (End of Q2)
+         if (oldQ === 2) {
+             this.addToLog("HALFTIME");
+             // Flip possession to whoever kicked off in Q1
+             // If Home Received in Q1, Away Receives in Q3
+             const receiverInQ3 = this.receivedFirstHalf === 'home' ? 'away' : 'home';
+             this.state.possession = receiverInQ3;
+             this.state.ballOn = 25; // Touchback start
+             this.state.down = 1;
+             this.state.distance = 10;
+             this.addToLog(`${this.getOffenseTeam().name} receives the 2nd half kickoff.`);
+         }
+      } else if (this.state.quarter === 4) {
+         // Check for Overtime
+         if (this.state.homeScore === this.state.awayScore) {
+             this.state.quarter = 5;
+             this.state.timeRemaining = 600; // 10 mins
+             this.addToLog("End of Regulation. TIED GAME! Going to Overtime!");
+             this.startOvertimeCoinToss();
+         } else {
+             this.state.timeRemaining = 0;
+             this.state.gameOver = true;
+             this.addToLog("GAME OVER");
+         }
       } else {
-        this.state.timeRemaining = 0;
-        this.state.gameOver = true;
-        this.addToLog("GAME OVER");
+          // OT Time Expired (Still Tied)
+          this.state.timeRemaining = 0;
+          this.state.gameOver = true;
+          this.addToLog("OT Ended. TIE GAME.");
       }
     }
   }
 
   addToLog(msg) {
     if (this.state.log.length > 50) this.state.log.pop();
-    this.state.log.unshift(`Q${this.state.quarter} ${Math.floor(this.state.timeRemaining/60)}:${(this.state.timeRemaining%60).toString().padStart(2,'0')} - ${msg}`);
+    const qLabel = this.state.quarter > 4 ? 'OT' : `Q${this.state.quarter}`;
+    this.state.log.unshift(`${qLabel} ${Math.floor(this.state.timeRemaining/60)}:${(this.state.timeRemaining%60).toString().padStart(2,'0')} - ${msg}`);
   }
 }
