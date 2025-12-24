@@ -56,7 +56,11 @@ export default function SeasonScreen({ route, navigation }) {
   const renderStanding = ({ item, index }) => (
     <View style={[styles.standingRow, item.id === userTeamId && styles.userRow]}>
       <Text style={styles.rank}>{index + 1}</Text>
-      <Text style={styles.standingTeam}>{item.name}</Text>
+      <View style={{flexDirection:'row', alignItems:'center', flex:1}}>
+         <Text style={styles.standingTeam}>{item.name}</Text>
+         {item.eliminated && <Text style={{color:'red', fontWeight:'bold', marginLeft:5}}>E</Text>}
+         {/* Could add Z/Y/X for clinched later */}
+      </View>
       <Text style={styles.record}>{item.w} - {item.l}</Text>
       <Text style={styles.diff}>{item.pf - item.pa}</Text>
     </View>
