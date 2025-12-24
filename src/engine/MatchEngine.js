@@ -80,54 +80,71 @@ export class MatchEngine {
         if (defChoice === DEFENSE_TYPES.RUN_DEFENSE) {
           yardsGained = Math.floor(Math.random() * 3) - 1; // -1 to 2
           description = "Stuffed at the line!";
+          // 2% Fumble Chance
+          if (Math.random() < 0.02) { turnover = true; description = "FUMBLE! Recovered by Defense!"; }
         } else if (defChoice === DEFENSE_TYPES.BLITZ) {
-           yardsGained = Math.floor(Math.random() * 10) + 2; // Broken play
+           yardsGained = Math.floor(Math.random() * 12) + 4; // Broken play (high variance)
            description = "Breaks through the blitz!";
         } else { // Coverage
-           yardsGained = Math.floor(Math.random() * 6) + 2; // 2 to 8
-           description = "Phes strong up the middle.";
+           yardsGained = Math.floor(Math.random() * 6) + 2; 
+           description = "Pushes strong up the middle.";
         }
         break;
 
       case PLAY_TYPES.RUN_OUTSIDE:
         if (defChoice === DEFENSE_TYPES.BLITZ) {
-          yardsGained = Math.floor(Math.random() * 4) - 2; // Risk loss
-          description = "Blitz catches the runner in the backfield!";
+           // 30% Chance of HUGE loss, 70% Chance of huge gain
+           if (Math.random() < 0.30) {
+              yardsGained = -4; 
+              description = "Blitz tackle for loss!";
+           } else {
+              yardsGained = Math.floor(Math.random() * 10) + 5;
+              description = "Beats the blitz to the edge!";
+           }
         } else if (defChoice === DEFENSE_TYPES.RUN_DEFENSE) {
-          yardsGained = Math.floor(Math.random() * 3);
+          yardsGained = Math.floor(Math.random() * 4) - 1;
           description = "Contain holds.";
         } else {
-          yardsGained = Math.floor(Math.random() * 15) + 3; // Big gain
+          yardsGained = Math.floor(Math.random() * 12) + 3; 
           description = "Turns the corner!";
         }
         break;
 
       case PLAY_TYPES.PASS_SHORT:
         if (defChoice === DEFENSE_TYPES.PASS_COVERAGE) {
-          if (roll > 0.5) { yardsGained = Math.floor(Math.random() * 5); description = "Checkdown complete."; }
-          else { yardsGained = 0; description = "Incomplete, coverage was tight."; }
+          if (roll > 0.4) { yardsGained = Math.floor(Math.random() * 7) + 2; description = "Checkdown complete."; }
+          else { 
+             yardsGained = 0; description = "Incomplete, coverage was tight."; 
+             if (Math.random() < 0.05) { turnover = true; description = "INTERCEPTED by the linebacker!"; yardsGained = 0; }
+          }
         } else if (defChoice === DEFENSE_TYPES.BLITZ) {
-          yardsGained = Math.floor(Math.random() * 12) + 5;
-          description = "Quick slant beats the blitz!";
+          // Blitz vs Short Pass: Offense usually wins quickly
+          yardsGained = Math.floor(Math.random() * 10) + 4;
+          description = "Hot read! Slant route open vs Blitz.";
         } else { // Run Defense
-          yardsGained = Math.floor(Math.random() * 8) + 4;
+          yardsGained = Math.floor(Math.random() * 10) + 5;
           description = "Easy completion over the middle.";
         }
         break;
 
       case PLAY_TYPES.PASS_DEEP:
         if (defChoice === DEFENSE_TYPES.PASS_COVERAGE) {
-          if (roll > 0.8) { yardsGained = 40; description = "Incredible catch in traffic!"; }
-          else if (roll < 0.2) { 
-             turnover = true; description = "INTERCEPTED deep downfield!"; 
-             yardsGained = -10; // Return
-          } else {
+          if (roll > 0.75) { yardsGained = 35 + Math.floor(Math.random()*15); description = "Incredible catch deep!"; }
+          else { 
              yardsGained = 0; description = "Incomplete deep.";
+             if (Math.random() < 0.12) { turnover = true; description = "INTERCEPTED deep downfield!"; yardsGained = -10; }
           }
         } else if (defChoice === DEFENSE_TYPES.BLITZ) {
-          if (roll > 0.6) { yardsGained = 70; touchdown = true; description = "BOMB! Has a man open! TOUCHDOWN!"; }
-          else { yardsGained = -8; description = "SACKED! The blitz gets home."; }
-        } else {
+          // Blitz vs Deep: High Risk
+          if (Math.random() < 0.35) { 
+             // SACK!
+             yardsGained = -8; description = "SACKED! The blitz gets home."; 
+             if (Math.random() < 0.20) { turnover = true; description = "STRIP SACK! FUMBLE!"; }
+          } else { 
+             // If not sacked, likely TD
+             yardsGained = 60; touchdown = true; description = "BOMB! Has a man wide open! TOUCHDOWN!"; 
+          }
+        } else { // Run Defense vs Deep
            if (roll > 0.4) { yardsGained = 25; description = "Deep post route open."; }
            else { yardsGained = 0; description = "Overthrow."; }
         }
