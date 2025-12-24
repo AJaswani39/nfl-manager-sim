@@ -33,22 +33,27 @@ export class MatchEngine {
   }
 
   // Helper to flip field
-  changePossession(kickoff = false) {
+  changePossession(type = 'punt') {
+    // types: 'kickoff', 'punt', 'downs', 'turnover', 'score'
     this.state.possession = this.state.possession === 'home' ? 'away' : 'home';
     this.state.down = 1;
     this.state.distance = 10;
     
-    // Simple Kickoff/Punt logic
-    if (kickoff) {
-      this.state.ballOn = 25; // Touchback
+    if (type === 'kickoff' || type === 'score') {
+      this.state.ballOn = 25; // Touchback logic
       this.addToLog(`Kickoff! ${this.getOffenseTeam().abbreviation} starts at their own 25.`);
-    } else {
-      // Punt logic (flip field)
-      const puntDist = 40 + Math.floor(Math.random() * 10);
+    } else if (type === 'punt') {
+      const puntDist = 40 + Math.floor(Math.random() * 15); // Better punt logic
       let newLoc = (100 - this.state.ballOn) + puntDist;
-      if (newLoc > 100) newLoc = 80; // Touchback
-      this.state.ballOn = 100 - newLoc; // Flip perspective
+      if (newLoc > 100) newLoc = 80; 
+      this.state.ballOn = 100 - newLoc; 
       this.addToLog(`Punt! ${this.getOffenseTeam().abbreviation} takes over at their ${Math.round(this.state.ballOn)}.`);
+    } else if (type === 'downs' || type === 'turnover') {
+      // Ball stays at same spot, just flipped perspective
+      // Example: User fails at OPP 10 (ballOn=90). Opponent takes over at OWN 10 (ballOn=10).
+      // Example: User fails at OWN 30 (ballOn=30). Opponent takes over at OPP 30 (ballOn=70).
+      this.state.ballOn = 100 - this.state.ballOn;
+      this.addToLog(`${this.getOffenseTeam().abbreviation} takes over at their ${Math.round(this.state.ballOn)}.`);
     }
   }
 
@@ -151,7 +156,7 @@ export class MatchEngine {
         break;
 
       case PLAY_TYPES.PUNT:
-         this.changePossession();
+         this.changePossession('punt');
          return;
 
       case PLAY_TYPES.FG:
@@ -159,18 +164,25 @@ export class MatchEngine {
          if (dist < 45 || (dist < 55 && Math.random() > 0.3)) {
             this.addToLog(`Field Goal from ${dist} yds is GOOD!`);
             this.score(3);
-            this.changePossession(true);
+            this.changePossession('score');
          } else {
             this.addToLog(`Field Goal from ${dist} yds is NO GOOD.`);
-            this.changePossession(false);
+            this.changePossession('turnover'); // Missed FG is spot foul turnover
          }
          return;
     }
 
     // Process Result
     if (turnover) {
-      this.addToLog(description);
-      this.changePossession();
+      // Check for Defensive Touchdown (Pick-6 or Scoop-and-Score)
+      if (Math.random() < 0.08) { // 8% chance on a turnover
+         this.scoreDefense(7);
+         this.addToLog(description + " DEFENSE RETURNS IT FOR A TOUCHDOWN!!!");
+         this.changePossession('score');
+      } else {
+         this.addToLog(description);
+         this.changePossession('turnover');
+      }
     } else {
       if (yardsGained === 0 && !description.includes("Incomplete")) description = "No Gain.";
       this.state.ballOn += yardsGained;
@@ -182,7 +194,7 @@ export class MatchEngine {
       if (this.state.ballOn >= 100 || touchdown) {
         this.score(7); // Simplified 7 pts
         this.addToLog(`TOUCHDOWN ${off.abbreviation}!`);
-        this.changePossession(true);
+        this.changePossession('score');
       } else {
         // Down Logic
         if (this.state.distance <= 0) {
@@ -193,7 +205,7 @@ export class MatchEngine {
           this.state.down++;
           if (this.state.down > 4) {
             this.addToLog("Turnover on Downs!");
-            this.changePossession();
+            this.changePossession('downs');
           }
         }
       }
@@ -203,6 +215,12 @@ export class MatchEngine {
   score(points) {
     if (this.state.possession === 'home') this.state.homeScore += points;
     else this.state.awayScore += points;
+  }
+
+  scoreDefense(points) {
+     // Scoring for the team NOT in possession
+    if (this.state.possession === 'home') this.state.awayScore += points;
+    else this.state.homeScore += points;
   }
 
   addToLog(msg) {
