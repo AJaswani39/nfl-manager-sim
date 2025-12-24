@@ -51,7 +51,18 @@ export default function MatchScreen({ route, navigation }) {
 
   const renderField = () => {
      // A simple progress bar representing the field
-     // 0 = Left (Own Endzone), 100 = Right (Opponent Endzone)
+     // 0 = Left (Home Endzone), 100 = Right (Away Endzone)
+     
+     // Calculate Visual X Position based on Possession
+     // If Home has ball: Own 20 -> 20% from Left. Moving Right.
+     // If Away has ball: Own 20 -> 20% from Right (80% from Left). Moving Left.
+     const isHome = gameState.possession === 'home';
+     
+     const visualBallX = isHome ? gameState.ballOn : (100 - gameState.ballOn);
+     const visualFirstDownX = isHome 
+        ? Math.min(100, gameState.ballOn + gameState.distance) 
+        : Math.max(0, (100 - gameState.ballOn) - gameState.distance);
+
      return (
         <View style={styles.fieldContainer}>
            <View style={styles.endzoneLeft}><Text style={styles.endzoneText}>{homeTeam.abbreviation}</Text></View>
@@ -61,11 +72,11 @@ export default function MatchScreen({ route, navigation }) {
                   <View key={y} style={[styles.yardLine, { left: `${y}%` }]} />
               ))}
               {/* Ball */}
-              <View style={[styles.football, { left: `${gameState.ballOn}%` }]} />
+              <View style={[styles.football, { left: `${visualBallX}%` }]} />
               {/* Line of Scrimmage */}
-              <View style={[styles.los, { left: `${gameState.ballOn}%` }]} />
+              <View style={[styles.los, { left: `${visualBallX}%` }]} />
               {/* First Down Line */}
-              <View style={[styles.firstDownLine, { left: `${Math.min(100, gameState.ballOn + gameState.distance)}%` }]} />
+              <View style={[styles.firstDownLine, { left: `${visualFirstDownX}%` }]} />
            </View>
            <View style={styles.endzoneRight}><Text style={styles.endzoneText}>{awayTeam.abbreviation}</Text></View>
         </View>
