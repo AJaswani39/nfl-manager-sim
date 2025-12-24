@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { StyleSheet, Text, View, SafeAreaView, TouchableOpacity, ScrollView, Animated } from 'react-native';
 import { MatchEngine, PLAY_TYPES, DEFENSE_TYPES } from '../engine/MatchEngine';
 import { TEAMS } from '../data/teams';
+import { league } from '../engine/LeagueEngine';
 
 export default function MatchScreen({ route, navigation }) {
   const { homeId, awayId } = route.params;
@@ -42,6 +43,29 @@ export default function MatchScreen({ route, navigation }) {
 
     // 2. Update React State
     setGameState({...engine.state});
+  };
+
+  const handleExitGame = () => {
+     // 1. Update League Standings
+     league.updateStandings(homeId, gameState.homeScore, gameState.awayScore);
+     league.updateStandings(awayId, gameState.awayScore, gameState.homeScore);
+     
+     // 2. Distribute Stats (Approximate based on score)
+     league.distributeStats(homeId, gameState.homeScore);
+     league.distributeStats(awayId, gameState.awayScore);
+
+     // 3. Mark Match as Played in Schedule (Important so we don't replay it)
+     // We need to find the match in the current week
+     if (league.currentWeek <= 17) {
+        const weekMatches = league.weeks[league.currentWeek - 1]; // 0-indexed
+        const match = weekMatches.find(m => m.home.id === homeId && m.away.id === awayId);
+        if (match) {
+           match.played = true;
+           match.result = { homeScore: gameState.homeScore, awayScore: gameState.awayScore };
+        }
+     }
+
+     navigation.navigate('Season', { userTeamId: homeId }); // Return to Hub
   };
 
   const getBallLocationText = () => {
@@ -94,8 +118,8 @@ export default function MatchScreen({ route, navigation }) {
             <Text style={styles.score}>{gameState.homeScore}</Text>
          </View>
          <View style={styles.gameClock}>
-            <Text style={styles.quarter}>Q{gameState.quarter}</Text>
-            <Text style={styles.time}>{Math.floor(gameState.timeRemaining / 60)}:00</Text>
+            <Text style={styles.quarter}>{gameState.gameOver ? "FINAL" : `Q${gameState.quarter}`}</Text>
+            <Text style={styles.time}>{Math.floor(gameState.timeRemaining / 60)}:{(gameState.timeRemaining % 60).toString().padStart(2,'0')}</Text>
          </View>
          <View style={styles.teamScore}>
             <Text style={styles.teamAbbr}>{awayTeam.abbreviation}</Text>
@@ -121,25 +145,33 @@ export default function MatchScreen({ route, navigation }) {
 
       {/* CONTROLS */}
       <View style={styles.controls}>
-         <Text style={styles.playCallTitle}>{isUserOffense ? "CALL PLAY" : "CALL DEFENSE"}</Text>
-         <View style={styles.buttonGrid}>
-            {isUserOffense ? (
-                <>
-                <TouchableOpacity style={styles.playBtn} onPress={() => handlePlayCall(PLAY_TYPES.RUN_INSIDE)}><Text style={styles.btnText}>RUN INSIDE</Text></TouchableOpacity>
-                <TouchableOpacity style={styles.playBtn} onPress={() => handlePlayCall(PLAY_TYPES.RUN_OUTSIDE)}><Text style={styles.btnText}>RUN OUTSIDE</Text></TouchableOpacity>
-                <TouchableOpacity style={styles.playBtn} onPress={() => handlePlayCall(PLAY_TYPES.PASS_SHORT)}><Text style={styles.btnText}>PASS SHORT</Text></TouchableOpacity>
-                <TouchableOpacity style={styles.playBtn} onPress={() => handlePlayCall(PLAY_TYPES.PASS_DEEP)}><Text style={styles.btnText}>PASS DEEP</Text></TouchableOpacity>
-                <TouchableOpacity style={[styles.playBtn, styles.specialBtn]} onPress={() => handlePlayCall(PLAY_TYPES.PUNT)}><Text style={styles.btnText}>PUNT</Text></TouchableOpacity>
-                <TouchableOpacity style={[styles.playBtn, styles.specialBtn]} onPress={() => handlePlayCall(PLAY_TYPES.FG)}><Text style={styles.btnText}>FIELD GOAL</Text></TouchableOpacity>
-                </>
-            ) : (
-                <>
-                <TouchableOpacity style={[styles.playBtn, styles.defBtn]} onPress={() => handlePlayCall(DEFENSE_TYPES.RUN_DEFENSE)}><Text style={styles.btnText}>RUN DEFENSE</Text></TouchableOpacity>
-                <TouchableOpacity style={[styles.playBtn, styles.defBtn]} onPress={() => handlePlayCall(DEFENSE_TYPES.PASS_COVERAGE)}><Text style={styles.btnText}>COVERAGE</Text></TouchableOpacity>
-                <TouchableOpacity style={[styles.playBtn, styles.defBtn]} onPress={() => handlePlayCall(DEFENSE_TYPES.BLITZ)}><Text style={styles.btnText}>BLITZ</Text></TouchableOpacity>
-                </>
-            )}
-         </View>
+         {!gameState.gameOver ? (
+            <>
+                <Text style={styles.playCallTitle}>{isUserOffense ? "CALL PLAY" : "CALL DEFENSE"}</Text>
+                <View style={styles.buttonGrid}>
+                    {isUserOffense ? (
+                        <>
+                        <TouchableOpacity style={styles.playBtn} onPress={() => handlePlayCall(PLAY_TYPES.RUN_INSIDE)}><Text style={styles.btnText}>RUN INSIDE</Text></TouchableOpacity>
+                        <TouchableOpacity style={styles.playBtn} onPress={() => handlePlayCall(PLAY_TYPES.RUN_OUTSIDE)}><Text style={styles.btnText}>RUN OUTSIDE</Text></TouchableOpacity>
+                        <TouchableOpacity style={styles.playBtn} onPress={() => handlePlayCall(PLAY_TYPES.PASS_SHORT)}><Text style={styles.btnText}>PASS SHORT</Text></TouchableOpacity>
+                        <TouchableOpacity style={styles.playBtn} onPress={() => handlePlayCall(PLAY_TYPES.PASS_DEEP)}><Text style={styles.btnText}>PASS DEEP</Text></TouchableOpacity>
+                        <TouchableOpacity style={[styles.playBtn, styles.specialBtn]} onPress={() => handlePlayCall(PLAY_TYPES.PUNT)}><Text style={styles.btnText}>PUNT</Text></TouchableOpacity>
+                        <TouchableOpacity style={[styles.playBtn, styles.specialBtn]} onPress={() => handlePlayCall(PLAY_TYPES.FG)}><Text style={styles.btnText}>FIELD GOAL</Text></TouchableOpacity>
+                        </>
+                    ) : (
+                        <>
+                        <TouchableOpacity style={[styles.playBtn, styles.defBtn]} onPress={() => handlePlayCall(DEFENSE_TYPES.RUN_DEFENSE)}><Text style={styles.btnText}>RUN DEFENSE</Text></TouchableOpacity>
+                        <TouchableOpacity style={[styles.playBtn, styles.defBtn]} onPress={() => handlePlayCall(DEFENSE_TYPES.PASS_COVERAGE)}><Text style={styles.btnText}>COVERAGE</Text></TouchableOpacity>
+                        <TouchableOpacity style={[styles.playBtn, styles.defBtn]} onPress={() => handlePlayCall(DEFENSE_TYPES.BLITZ)}><Text style={styles.btnText}>BLITZ</Text></TouchableOpacity>
+                        </>
+                    )}
+                </View>
+            </>
+         ) : (
+            <TouchableOpacity style={styles.exitBtn} onPress={handleExitGame}>
+                <Text style={styles.exitBtnText}>RETURN TO SEASON</Text>
+            </TouchableOpacity>
+         )}
       </View>
     </SafeAreaView>
   );
@@ -275,4 +307,19 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: 'bold',
   },
+  exitBtn: {
+      backgroundColor: '#4caf50',
+      padding: 20,
+      borderRadius: 8,
+      alignItems: 'center',
+      width: '100%',
+  },
+  exitBtnText: {
+      color: '#fff',
+      fontWeight: 'bold',
+      fontSize: 18,
+      letterSpacing: 1,
+  },
 });
+
+

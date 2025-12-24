@@ -145,22 +145,44 @@ export default function SeasonScreen({ route, navigation }) {
 
         {/* BRACKET PREVIEW */}
         {currentWeek >= 13 && (
-           <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Current Playoff Picture</Text>
-              <View style={{flexDirection:'row', justifyContent:'space-between'}}>
-                 <View style={{flex:1}}>
-                    <Text style={{fontWeight:'bold', marginBottom:4}}>AFC</Text>
-                    {league.getPlayoffPicture().AFC.map((t, i) => (
-                       <Text key={t.id} style={{fontSize:12, marginBottom:2}}>{i+1}. {t.name} ({t.w}-{t.l})</Text>
+           <View style={{margin:16, marginTop:0}}>
+              <Text style={styles.sectionTitle}>Projected Playoff Matchups</Text>
+              
+              {['AFC', 'NFC'].map(conf => {
+                const teams = league.getPlayoffPicture()[conf];
+                return (
+                  <View key={conf} style={{marginBottom: 20, backgroundColor: '#fff', borderRadius:12, padding:16}}>
+                    <Text style={{fontWeight:'900', fontSize:18, color: conf==='AFC'?'#d32f2f':'#1976d2', marginBottom:10}}>{conf} PLAYOFFS</Text>
+                    
+                    {/* BYE */}
+                    <View style={{flexDirection:'row', justifyContent:'space-between', marginBottom:8, paddingBottom:8, borderBottomWidth:1, borderColor:'#eee'}}>
+                       <Text style={{color:'#888', fontWeight:'bold'}}>BYE (No. 1 Seed)</Text>
+                       <Text style={{fontWeight:'bold'}}>{teams[0].name} ({teams[0].w}-{teams[0].l})</Text>
+                    </View>
+
+                    {/* MATCHUPS */}
+                    {[
+                      {high:1, low:6}, // Seed 2 vs 7 (index 1 vs 6)
+                      {high:2, low:5}, // Seed 3 vs 6 (index 2 vs 5)
+                      {high:3, low:4}  // Seed 4 vs 5 (index 3 vs 4)
+                    ].map((m, i) => (
+                      <View key={i} style={{flexDirection:'row', alignItems:'center', justifyContent:'space-between', marginBottom:12}}>
+                         <View style={{width:'45%'}}>
+                            <Text style={{fontSize:10, color:'#888'}}>#{m.high+1}</Text>
+                            <Text style={{fontWeight:'600'}}>{teams[m.high].name}</Text>
+                            <Text style={{fontSize:10, color:'#555'}}>({teams[m.high].w}-{teams[m.high].l})</Text>
+                         </View>
+                         <Text style={{fontWeight:'900', color:'#ccc'}}>VS</Text>
+                         <View style={{width:'45%', alignItems:'flex-end'}}>
+                            <Text style={{fontSize:10, color:'#888'}}>#{m.low+1}</Text>
+                            <Text style={{fontWeight:'600'}}>{teams[m.low].name}</Text>
+                            <Text style={{fontSize:10, color:'#555'}}>({teams[m.low].w}-{teams[m.low].l})</Text>
+                         </View>
+                      </View>
                     ))}
-                 </View>
-                 <View style={{flex:1}}>
-                    <Text style={{fontWeight:'bold', marginBottom:4}}>NFC</Text>
-                    {league.getPlayoffPicture().NFC.map((t, i) => (
-                       <Text key={t.id} style={{fontSize:12, marginBottom:2}}>{i+1}. {t.name} ({t.w}-{t.l})</Text>
-                    ))}
-                 </View>
-              </View>
+                  </View>
+                )
+              })}
            </View>
         )}
 
