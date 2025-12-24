@@ -7,6 +7,7 @@ import TeamDetailScreen from './src/screens/TeamDetailScreen';
 import SeasonScreen from './src/screens/SeasonScreen';
 
 import MatchScreen from './src/screens/MatchScreen';
+import DraftScreen from './src/screens/DraftScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -54,6 +55,16 @@ export default function App() {
             title: 'Game Day',
             headerStyle: { backgroundColor: '#000' },
             headerTintColor: '#fff',
+          }}
+        />
+        <Stack.Screen 
+          name="Draft" 
+          component={DraftScreen} 
+          options={{ 
+            title: 'Offseason Draft',
+            headerStyle: { backgroundColor: '#1e272e' },
+            headerTintColor: '#feca57',
+            headerLeft: null, // Prevent going back during draft
           }}
         />
       </Stack.Navigator>

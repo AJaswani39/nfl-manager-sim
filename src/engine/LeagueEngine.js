@@ -388,6 +388,89 @@ export class LeagueEngine {
 
     return odds;
   }
+  // DRAFT & OFFSEASON
+  
+  generateDraftClass() {
+     const positions = ['QB', 'RB', 'WR', 'TE', 'OL', 'DL', 'LB', 'CB', 'S'];
+     const firstNames = ['DeAndre', 'Marcus', 'Caleb', 'Trevor', 'Kenny', 'Jalen', 'Sauce', 'Tyreek', 'Justin', 'Patrick', 'Joe'];
+     const lastNames = ['Smith', 'Johnson', 'Williams', 'Jones', 'Brown', 'Davis', 'Miller', 'Wilson', 'Moore', 'Taylor'];
+     
+     this.draftClass = [];
+     for(let i=0; i<60; i++) { // 60 prospects
+         const pos = positions[Math.floor(Math.random() * positions.length)];
+         const rating = 65 + Math.floor(Math.random() * 25); // 65-90
+         this.draftClass.push({
+             id: `rookie_${Date.now()}_${i}`,
+             name: `${firstNames[Math.floor(Math.random()*firstNames.length)]} ${lastNames[Math.floor(Math.random()*lastNames.length)]}`,
+             position: pos,
+             rating: rating,
+             age: 21 + Math.floor(Math.random()*3)
+         });
+     }
+     this.draftClass.sort((a,b) => b.rating - a.rating); // Sort by quality for CPU
+  }
+
+  startDraft() {
+     this.generateDraftClass();
+     
+     // Generate Order (Reverse Standings)
+     const sortedTeams = this.getStandingsSorted().reverse(); // Worst teams first
+     this.draftOrder = sortedTeams.map(t => t.id);
+     this.currentPickIndex = 0;
+  }
+
+  resolveCpuPicks(userTeamId) {
+     const displayLog = [];
+     
+     while (this.currentPickIndex < this.draftOrder.length) {
+         const teamId = this.draftOrder[this.currentPickIndex];
+         if (teamId === userTeamId) {
+             return displayLog; // Stop and let user pick
+         }
+         
+         // CPU Pick: Best available
+         const pick = this.draftClass.shift(); 
+         if (pick) {
+            displayLog.push({ type: 'pick', teamId: teamId, player: pick });
+            // Add to roster (simplified: replace worst player or just add)
+            // For MVP we just console log it effectively, real roster mgmt is complex
+         }
+         this.currentPickIndex++;
+     }
+     return displayLog;
+  }
+
+  userSelectPlayer(userTeamId, playerIndex) {
+      const pick = this.draftClass.splice(playerIndex, 1)[0];
+      this.currentPickIndex++; // Move past user
+      return pick;
+  }
+
+  startNewSeason() {
+      // 1. Reset Week
+      this.currentWeek = 1;
+      this.phase = 'regular';
+      this.weeks = [];
+      
+      // 2. Reset Standings
+      this.standings = {};
+      this.initializeStandings();
+      
+      // 3. Reset Player Stats
+      this.playerStats = {};
+      this.initializePlayerStats();
+      
+      // 4. Generate New Schedule
+      this.generateSchedule();
+      
+      // 5. Progression (Simple)
+      TEAMS.forEach(t => {
+          // Random fluctuation in team ratings
+          t.ratings.offense = Math.max(60, Math.min(99, t.ratings.offense + Math.floor(Math.random()*6)-3));
+          t.ratings.defense = Math.max(60, Math.min(99, t.ratings.defense + Math.floor(Math.random()*6)-3));
+          t.ratings.overall = Math.round((t.ratings.offense + t.ratings.defense)/2);
+      });
+  }
 }
 
 export const league = new LeagueEngine();

@@ -10,6 +10,15 @@ export default function SeasonScreen({ route, navigation }) {
   const [standings, setStandings] = useState(league.getStandingsSorted());
   const [recentResult, setRecentResult] = useState(null);
 
+  // Refresh data when screen receives focus (e.g. returning from Match or Draft)
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      setCurrentWeek(league.currentWeek);
+      setStandings(league.getStandingsSorted());
+    });
+    return unsubscribe;
+  }, [navigation]);
+
   // Helper: Get user's match for this week
   const getNextMatch = () => {
     // if (league.currentWeek > 17) return null; // REMOVED LIMIT
@@ -137,7 +146,7 @@ export default function SeasonScreen({ route, navigation }) {
         ) : (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Season Over</Text>
-            <TouchableOpacity style={styles.simButton} onPress={() => alert("Draft Coming Soon!")}>
+            <TouchableOpacity style={styles.simButton} onPress={() => navigation.navigate('Draft', { userTeamId })}>
                 <Text style={styles.simBtnText}>START OFFSEASON</Text>
             </TouchableOpacity>
           </View>
