@@ -6,6 +6,8 @@ import TeamDetailScreen from './src/screens/TeamDetailScreen';
 
 import SeasonScreen from './src/screens/SeasonScreen';
 
+import MatchScreen from './src/screens/MatchScreen';
+
 const Stack = createNativeStackNavigator();
 
 export default function App() {
@@ -43,6 +45,15 @@ export default function App() {
             headerTransparent: true,
             headerTintColor: '#fff',
             headerTitle: '', 
+          }}
+        />
+        <Stack.Screen 
+          name="Match" 
+          component={MatchScreen} 
+          options={{ 
+            title: 'Game Day',
+            headerStyle: { backgroundColor: '#000' },
+            headerTintColor: '#fff',
           }}
         />
       </Stack.Navigator>

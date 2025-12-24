@@ -84,8 +84,18 @@ export default function SeasonScreen({ route, navigation }) {
               </View>
             ) : <Text>Bye Week</Text>}
 
-            <TouchableOpacity style={styles.simButton} onPress={handleSimulateWeek}>
-              <Text style={styles.simButtonText}>SIMULATE WEEK</Text>
+            <TouchableOpacity 
+              style={styles.simButton} 
+              onPress={() => navigation.navigate('Match', { 
+                  homeId: nextMatch.home.id, 
+                  awayId: nextMatch.away.id 
+              })}
+            >
+              <Text style={styles.simButtonText}>PLAY GAME</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity style={[styles.simButton, {marginTop:10, backgroundColor:'#555'}]} onPress={handleSimulateWeek}>
+              <Text style={styles.simButtonText}>QUICK SIMULATE</Text>
             </TouchableOpacity>
           </View>
         ) : (
