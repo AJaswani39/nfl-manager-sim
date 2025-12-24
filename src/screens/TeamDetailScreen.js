@@ -2,8 +2,9 @@ import React from 'react';
 import { StyleSheet, Text, View, FlatList, SafeAreaView } from 'react-native';
 import { TEAMS } from '../data/teams';
 import { ROSTERS } from '../data/rosters';
+import { league } from '../engine/LeagueEngine';
 
-export default function TeamDetailScreen({ route }) {
+export default function TeamDetailScreen({ route, navigation }) {
   const { teamId } = route.params;
   const team = TEAMS.find(t => t.id === teamId);
   const players = ROSTERS[teamId] || [];
@@ -20,14 +21,21 @@ export default function TeamDetailScreen({ route }) {
     return '#616161';
   };
 
-  const renderPlayer = ({ item }) => (
+  const renderPlayer = ({ item }) => {
+    const stats = league.playerStats[item.id];
+    let statText = "";
+    if (item.position === 'QB') statText = `${stats?.passingYards||0} yds, ${stats?.passingTDs||0} TD`;
+    else if (item.position === 'RB') statText = `${stats?.rushingYards||0} yds, ${stats?.rushingTDs||0} TD`;
+    else if (['WR', 'TE'].includes(item.position)) statText = `${stats?.receivingYards||0} yds, ${stats?.receivingTDs||0} TD`;
+
+    return (
     <View style={styles.playerCard}>
       <View style={[styles.positionBadge, { backgroundColor: getPositionColor(item.position) }]}>
         <Text style={[styles.positionText, { color: getPositionTextColor(item.position) }]}>{item.position}</Text>
       </View>
       <View style={styles.playerInfo}>
         <Text style={styles.playerName}>{item.name}</Text>
-        <Text style={styles.playerMeta}>Age: {item.age}</Text>
+        <Text style={styles.playerMeta}>{statText || `Age: ${item.age}`}</Text>
       </View>
       <View style={styles.ratingCircle}>
         <Text style={[
@@ -38,7 +46,8 @@ export default function TeamDetailScreen({ route }) {
         </Text>
       </View>
     </View>
-  );
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -50,6 +59,13 @@ export default function TeamDetailScreen({ route }) {
            <Text style={styles.headerStatText}>DEF: {team.ratings.defense}</Text>
            <Text style={styles.headerStatText}>OVR: {team.ratings.overall}</Text>
         </View>
+
+        <TouchableOpacity 
+          style={styles.startSeasonButton}
+          onPress={() => navigation.navigate('Season', { userTeamId: team.id })}
+        >
+          <Text style={styles.startSeasonText}>START 2026 SEASON</Text>
+        </TouchableOpacity>
       </View>
       
       <View style={styles.rosterHeader}>
@@ -168,5 +184,17 @@ const styles = StyleSheet.create({
   ratingText: {
     fontSize: 18,
     fontWeight: '700',
+  },
+  startSeasonButton: {
+    backgroundColor: '#fff',
+    marginTop: 20,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderRadius: 8,
+  },
+  startSeasonText: {
+    color: '#333',
+    fontWeight: '900',
+    fontSize: 16,
   },
 });

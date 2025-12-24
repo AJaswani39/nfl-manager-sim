@@ -4,6 +4,8 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import HomeScreen from './src/screens/HomeScreen';
 import TeamDetailScreen from './src/screens/TeamDetailScreen';
 
+import SeasonScreen from './src/screens/SeasonScreen';
+
 const Stack = createNativeStackNavigator();
 
 export default function App() {
@@ -31,6 +33,16 @@ export default function App() {
             headerTransparent: true,
             headerTintColor: '#fff',
             headerTitle: '', // Hide title as the custom header covers it
+          }}
+        />
+        <Stack.Screen 
+          name="Season" 
+          component={SeasonScreen} 
+          options={{ 
+            title: 'Season Mode',
+            headerTransparent: true,
+            headerTintColor: '#fff',
+            headerTitle: '', 
           }}
         />
       </Stack.Navigator>
