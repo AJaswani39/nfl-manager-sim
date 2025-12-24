@@ -210,6 +210,8 @@ export class MatchEngine {
         }
       }
     }
+    
+    this.tickClock();
   }
 
   score(points) {
@@ -223,7 +225,26 @@ export class MatchEngine {
     else this.state.homeScore += points;
   }
 
+  tickClock() {
+    // Standard play takes ~30-40 seconds accelerated
+    const timeBurn = 30 + Math.floor(Math.random() * 15);
+    this.state.timeRemaining -= timeBurn;
+
+    if (this.state.timeRemaining <= 0) {
+      if (this.state.quarter < 4) {
+        this.state.quarter++;
+        this.state.timeRemaining = 900; // Reset to 15 mins
+        this.addToLog(`End of Quarter ${this.state.quarter - 1}`);
+      } else {
+        this.state.timeRemaining = 0;
+        this.state.gameOver = true;
+        this.addToLog("GAME OVER");
+      }
+    }
+  }
+
   addToLog(msg) {
-    this.state.log.unshift(`Q${this.state.quarter}: ${msg}`);
+    if (this.state.log.length > 50) this.state.log.pop();
+    this.state.log.unshift(`Q${this.state.quarter} ${Math.floor(this.state.timeRemaining/60)}:${(this.state.timeRemaining%60).toString().padStart(2,'0')} - ${msg}`);
   }
 }
