@@ -3,6 +3,9 @@ export const PLAY_TYPES = {
   RUN_OUTSIDE: 'RUN_OUTSIDE',
   PASS_SHORT: 'PASS_SHORT',
   PASS_DEEP: 'PASS_DEEP',
+  PASS_SCREEN: 'PASS_SCREEN',
+  PASS_PLAY_ACTION: 'PASS_PLAY_ACTION',
+  RUN_DRAW: 'RUN_DRAW',
   PUNT: 'PUNT',
   FG: 'FG',
 };
@@ -20,7 +23,7 @@ export class MatchEngine {
     
     this.state = {
       quarter: 1,
-      timeRemaining: 900, // 15 mins in seconds (scaled down for gameplay speed usually)
+      timeRemaining: 900, // 15 mins in seconds
       down: 1,
       distance: 10,
       ballOn: 20, // 0-100 scale. 0 = Own Endzone, 100 = Opponent Endzone
@@ -50,8 +53,6 @@ export class MatchEngine {
       this.addToLog(`Punt! ${this.getOffenseTeam().abbreviation} takes over at their ${Math.round(this.state.ballOn)}.`);
     } else if (type === 'downs' || type === 'turnover') {
       // Ball stays at same spot, just flipped perspective
-      // Example: User fails at OPP 10 (ballOn=90). Opponent takes over at OWN 10 (ballOn=10).
-      // Example: User fails at OWN 30 (ballOn=30). Opponent takes over at OPP 30 (ballOn=70).
       this.state.ballOn = 100 - this.state.ballOn;
       this.addToLog(`${this.getOffenseTeam().abbreviation} takes over at their ${Math.round(this.state.ballOn)}.`);
     }
@@ -83,14 +84,13 @@ export class MatchEngine {
     switch (offChoice) {
       case PLAY_TYPES.RUN_INSIDE:
         if (defChoice === DEFENSE_TYPES.RUN_DEFENSE) {
-          yardsGained = Math.floor(Math.random() * 3) - 1; // -1 to 2
+          yardsGained = Math.floor(Math.random() * 3) - 1; 
           description = "Stuffed at the line!";
-          // 2% Fumble Chance
           if (Math.random() < 0.02) { turnover = true; description = "FUMBLE! Recovered by Defense!"; }
         } else if (defChoice === DEFENSE_TYPES.BLITZ) {
-           yardsGained = Math.floor(Math.random() * 12) + 4; // Broken play (high variance)
+           yardsGained = Math.floor(Math.random() * 12) + 4; 
            description = "Breaks through the blitz!";
-        } else { // Coverage
+        } else { 
            yardsGained = Math.floor(Math.random() * 6) + 2; 
            description = "Pushes strong up the middle.";
         }
@@ -98,20 +98,27 @@ export class MatchEngine {
 
       case PLAY_TYPES.RUN_OUTSIDE:
         if (defChoice === DEFENSE_TYPES.BLITZ) {
-           // 30% Chance of HUGE loss, 70% Chance of huge gain
            if (Math.random() < 0.30) {
-              yardsGained = -4; 
-              description = "Blitz tackle for loss!";
+              yardsGained = -4; description = "Blitz tackle for loss!";
            } else {
-              yardsGained = Math.floor(Math.random() * 10) + 5;
-              description = "Beats the blitz to the edge!";
+              yardsGained = Math.floor(Math.random() * 10) + 5; description = "Beats the blitz to the edge!";
            }
         } else if (defChoice === DEFENSE_TYPES.RUN_DEFENSE) {
-          yardsGained = Math.floor(Math.random() * 4) - 1;
-          description = "Contain holds.";
+          yardsGained = Math.floor(Math.random() * 4) - 1; description = "Contain holds.";
         } else {
-          yardsGained = Math.floor(Math.random() * 12) + 3; 
-          description = "Turns the corner!";
+          yardsGained = Math.floor(Math.random() * 12) + 3; description = "Turns the corner!";
+        }
+        break;
+
+      case PLAY_TYPES.RUN_DRAW:
+        // Good vs PASS_COVERAGE, Bag vs RUN_DEFENSE/BLITZ
+        if (defChoice === DEFENSE_TYPES.PASS_COVERAGE) {
+           yardsGained = Math.floor(Math.random() * 10) + 5;
+           description = "Defense drops back, Draw play wide open!";
+        } else if (defChoice === DEFENSE_TYPES.BLITZ) {
+           yardsGained = -2; description = "Blitz blows up the slow handoff.";
+        } else {
+           yardsGained = 1; description = "Run defense swallows the draw.";
         }
         break;
 
@@ -123,14 +130,40 @@ export class MatchEngine {
              if (Math.random() < 0.05) { turnover = true; description = "INTERCEPTED by the linebacker!"; yardsGained = 0; }
           }
         } else if (defChoice === DEFENSE_TYPES.BLITZ) {
-          // Blitz vs Short Pass: Offense usually wins quickly
-          yardsGained = Math.floor(Math.random() * 10) + 4;
-          description = "Hot read! Slant route open vs Blitz.";
-        } else { // Run Defense
-          yardsGained = Math.floor(Math.random() * 10) + 5;
-          description = "Easy completion over the middle.";
+          yardsGained = Math.floor(Math.random() * 10) + 4; description = "Hot read! Slant route open vs Blitz.";
+        } else { 
+          yardsGained = Math.floor(Math.random() * 10) + 5; description = "Easy completion over the middle.";
         }
         break;
+
+      case PLAY_TYPES.PASS_SCREEN:
+         // Good vs BLITZ, Bad vs MAN/COVERAGE
+         if (defChoice === DEFENSE_TYPES.BLITZ) {
+            yardsGained = Math.floor(Math.random() * 15) + 5;
+            description = "Perfect screen call against the blitz!";
+         } else if (defChoice === DEFENSE_TYPES.PASS_COVERAGE) {
+            yardsGained = Math.floor(Math.random() * 3) - 2;
+            description = "Screen sniffed out by coverage.";
+            if (Math.random() < 0.05) { turnover = true; description = "Screen pass JUMPED! INTERCEPTION!"; }
+         } else {
+            yardsGained = Math.floor(Math.random() * 5);
+            description = "Screen play gets a few yards.";
+         }
+         break;
+
+      case PLAY_TYPES.PASS_PLAY_ACTION:
+         // Good vs RUN_DEFENSE, Bad vs BLITZ
+         if (defChoice === DEFENSE_TYPES.RUN_DEFENSE) {
+             yardsGained = Math.floor(Math.random() * 20) + 10;
+             description = "Defense bites on the fake! Wide open!";
+         } else if (defChoice === DEFENSE_TYPES.BLITZ) {
+             yardsGained = -7; description = "SACK! No time for the fake.";
+             if (Math.random() < 0.15) { turnover = true; description = "STRIP SACK on the play action!"; }
+         } else {
+             yardsGained = Math.floor(Math.random() * 10);
+             description = "Coverage holds up on play action.";
+         }
+         break;
 
       case PLAY_TYPES.PASS_DEEP:
         if (defChoice === DEFENSE_TYPES.PASS_COVERAGE) {
@@ -140,16 +173,13 @@ export class MatchEngine {
              if (Math.random() < 0.12) { turnover = true; description = "INTERCEPTED deep downfield!"; yardsGained = -10; }
           }
         } else if (defChoice === DEFENSE_TYPES.BLITZ) {
-          // Blitz vs Deep: High Risk
           if (Math.random() < 0.35) { 
-             // SACK!
              yardsGained = -8; description = "SACKED! The blitz gets home."; 
              if (Math.random() < 0.20) { turnover = true; description = "STRIP SACK! FUMBLE!"; }
           } else { 
-             // If not sacked, likely TD
              yardsGained = 60; touchdown = true; description = "BOMB! Has a man wide open! TOUCHDOWN!"; 
           }
-        } else { // Run Defense vs Deep
+        } else {
            if (roll > 0.4) { yardsGained = 25; description = "Deep post route open."; }
            else { yardsGained = 0; description = "Overthrow."; }
         }
@@ -167,14 +197,13 @@ export class MatchEngine {
             this.changePossession('score');
          } else {
             this.addToLog(`Field Goal from ${dist} yds is NO GOOD.`);
-            this.changePossession('turnover'); // Missed FG is spot foul turnover
+            this.changePossession('turnover');
          }
          return;
     }
 
     // Process Result
     if (turnover) {
-      // Check for Defensive Touchdown (Pick-6 or Scoop-and-Score)
       if (Math.random() < 0.08) { // 8% chance on a turnover
          this.scoreDefense(7);
          this.addToLog(description + " DEFENSE RETURNS IT FOR A TOUCHDOWN!!!");
@@ -190,13 +219,11 @@ export class MatchEngine {
       
       this.addToLog(description + ` (${yardsGained} yds)`);
 
-      // Touchdown Check
       if (this.state.ballOn >= 100 || touchdown) {
-        this.score(7); // Simplified 7 pts
+        this.score(7);
         this.addToLog(`TOUCHDOWN ${off.abbreviation}!`);
         this.changePossession('score');
       } else {
-        // Down Logic
         if (this.state.distance <= 0) {
           this.state.down = 1;
           this.state.distance = 10;
@@ -220,20 +247,18 @@ export class MatchEngine {
   }
 
   scoreDefense(points) {
-     // Scoring for the team NOT in possession
     if (this.state.possession === 'home') this.state.awayScore += points;
     else this.state.homeScore += points;
   }
 
   tickClock() {
-    // Standard play takes ~30-40 seconds accelerated
     const timeBurn = 30 + Math.floor(Math.random() * 15);
     this.state.timeRemaining -= timeBurn;
 
     if (this.state.timeRemaining <= 0) {
       if (this.state.quarter < 4) {
         this.state.quarter++;
-        this.state.timeRemaining = 900; // Reset to 15 mins
+        this.state.timeRemaining = 900;
         this.addToLog(`End of Quarter ${this.state.quarter - 1}`);
       } else {
         this.state.timeRemaining = 0;

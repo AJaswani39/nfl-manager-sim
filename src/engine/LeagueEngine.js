@@ -18,6 +18,7 @@ export class LeagueEngine {
     this.standings = {}; 
     this.playerStats = {}; // { playerId: { passingYards: 0, touchdowns: 0, ... } }
     this.currentWeek = 1;
+    this.phase = 'regular'; // 'regular', 'playoffs', 'offseason'
     this.initializeStandings();
     this.initializePlayerStats();
   }
@@ -63,29 +64,146 @@ export class LeagueEngine {
     }
   }
 
+  startPlayoffs() {
+    this.phase = 'playoffs';
+    this.generatePlayoffRound('Wild Card');
+  }
+
+  generatePlayoffRound(roundName) {
+    const seeds = this.getPlayoffPicture(); // Returns { AFC: [7 teams], NFC: [7 teams] } sorted by seed result
+    const newMatches = [];
+    const w = this.weeks.length + 1; // Week 18+
+
+    // WILD CARD ROUND (Weeks 1-17 done. This is Week 18)
+    if (roundName === 'Wild Card') {
+       // AFC & NFC: 2 vs 7, 3 vs 6, 4 vs 5. (Seed 1 Bye)
+       ['AFC', 'NFC'].forEach(conf => {
+          const t = seeds[conf];
+          newMatches.push(this.createMatch(w, t[1], t[6], 'Wild Card')); // 2 vs 7
+          newMatches.push(this.createMatch(w, t[2], t[5], 'Wild Card')); // 3 vs 6
+          newMatches.push(this.createMatch(w, t[3], t[4], 'Wild Card')); // 4 vs 5
+       });
+    } 
+    // DIVISIONAL ROUND
+    else if (roundName === 'Divisional') {
+       // We need to know who won the WC round to re-seed.
+       // The previous week (last in this.weeks) contains the results.
+       const lastWeek = this.weeks[this.weeks.length - 1];
+       const winners = lastWeek.map(m => m.result.homeScore > m.result.awayScore ? m.home : m.away);
+       
+       ['AFC', 'NFC'].forEach(conf => {
+          // Get Seed 1 (who had bye)
+          const allSeeds = this.getPlayoffPicture()[conf];
+          const seed1 = allSeeds[0];
+          
+          // Get WC Winners for this conference
+          const confWinners = winners.filter(t => t.conference === conf);
+          
+          // Re-seed: Sort winners by their original seed index logic (or just find them in allSeeds)
+          // Actually, we can just look up their seed index in allSeeds
+          confWinners.sort((a,b) => {
+             const idxA = allSeeds.findIndex(s => s.id === a.id);
+             const idxB = allSeeds.findIndex(s => s.id === b.id);
+             return idxA - idxB;
+          }); 
+          // Lowest seed (highest index) plays Seed 1
+          const lowestSeed = confWinners.pop(); // Last one is worst seed
+          const bestWCSeed = confWinners[0];    // Best remaining WC winner
+          const secondBestWC = confWinners[1];  // Middle WC winner (wait, only 3 games. 3 winners.)
+          
+          // Matchups:
+          // 1 vs Lowest Remaining
+          // 2nd Highest Remaining vs 3rd Highest Remaining (Wait. 3 winners + 1 Bye = 4 Teams)
+          // Teams: Seed 1, WC1, WC2, WC3 (Sorted by seed quality)
+          // Lowest seed is WC3. 
+          // Match 1: Seed 1 vs WC3 (Lowest)
+          // Match 2: WC1 vs WC2
+          
+          newMatches.push(this.createMatch(w, seed1, lowestSeed, 'Divisional'));
+          newMatches.push(this.createMatch(w, confWinners[0], confWinners[1], 'Divisional'));
+       });
+    }
+    // CONFERENCE CHAMPIONSHIP
+    else if (roundName === 'Conference') {
+       const lastWeek = this.weeks[this.weeks.length - 1];
+       const winners = lastWeek.map(m => m.result.homeScore > m.result.awayScore ? m.home : m.away);
+       
+       ['AFC', 'NFC'].forEach(conf => {
+          const confWinners = winners.filter(t => t.conference === conf);
+          // Higher seed assumes Home Field. Re-sort by generic seed logic if needed, 
+          // but simulateWeek updates standings? No, playoffs don't update W/L.
+          // We rely on getPlayoffPicture for initial seed order.
+          const allSeeds = this.getPlayoffPicture()[conf];
+          confWinners.sort((a,b) => allSeeds.findIndex(s=>s.id===a.id) - allSeeds.findIndex(s=>s.id===b.id)); // Best seed first
+          
+          newMatches.push(this.createMatch(w, confWinners[0], confWinners[1], 'Conference'));
+       });
+    }
+    // SUPER BOWL
+    else if (roundName === 'Super Bowl') {
+       const lastWeek = this.weeks[this.weeks.length - 1];
+       const winners = lastWeek.map(m => m.result.homeScore > m.result.awayScore ? m.home : m.away);
+       // Should be 1 AFC and 1 NFC
+       newMatches.push(this.createMatch(w, winners[0], winners[1], 'Super Bowl'));
+    }
+
+    this.weeks.push(newMatches);
+  }
+
+  createMatch(week, home, away, type) {
+     return {
+        id: `p_${week}_${home.id}_${away.id}`,
+        week: week,
+        home: home,
+        away: away,
+        played: false,
+        result: null,
+        type: type // 'Wild Card', etc
+     };
+  }
+
+  // Update simulateWeek to handle progression
   simulateWeek(weekIndex) {
     if (weekIndex < 0 || weekIndex >= this.weeks.length) return;
     
     const weekMatches = this.weeks[weekIndex];
+    let allPlayed = true;
+
     weekMatches.forEach(match => {
       if (match.played) return;
-
+      
       const homeScore = this.calculateScore(match.home, match.away);
       const awayScore = this.calculateScore(match.away, match.home);
-
       match.result = { homeScore, awayScore };
       match.played = true;
 
-      this.updateStandings(match.home.id, homeScore, awayScore);
-      this.updateStandings(match.away.id, awayScore, homeScore);
-
-      // Distribute Stats
+      // Only update Regular Season standings
+      if (this.currentWeek <= 17) {
+        this.updateStandings(match.home.id, homeScore, awayScore);
+        this.updateStandings(match.away.id, awayScore, homeScore);
+      }
       this.distributeStats(match.home.id, homeScore);
       this.distributeStats(match.away.id, awayScore);
     });
 
     this.currentWeek++;
+
+    // Check for Progression triggers
+    if (this.currentWeek === 18 && this.phase === 'regular') {
+       this.startPlayoffs();
+    } else if (this.phase === 'playoffs') {
+       // Just finished a playoff week, generate next
+       const lastRound = weekMatches[0].type;
+       if (lastRound === 'Wild Card') this.generatePlayoffRound('Divisional');
+       else if (lastRound === 'Divisional') this.generatePlayoffRound('Conference');
+       else if (lastRound === 'Conference') this.generatePlayoffRound('Super Bowl');
+       else if (lastRound === 'Super Bowl') {
+          this.phase = 'offseason'; // End of season
+       }
+    }
   }
+
+// ... existing code ...
 
   calculateScore(offenseTeam, defenseTeam) {
     const base = Math.floor(Math.random() * 20); 

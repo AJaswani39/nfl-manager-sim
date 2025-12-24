@@ -12,7 +12,8 @@ export default function SeasonScreen({ route, navigation }) {
 
   // Helper: Get user's match for this week
   const getNextMatch = () => {
-    if (league.currentWeek > 17) return null;
+    // if (league.currentWeek > 17) return null; // REMOVED LIMIT
+    if (league.currentWeek > league.weeks.length) return null; // Safety check
     const weekMatches = league.weeks[league.currentWeek - 1];
     return weekMatches.find(m => m.home.id === userTeamId || m.away.id === userTeamId);
   };
@@ -20,8 +21,8 @@ export default function SeasonScreen({ route, navigation }) {
   const nextMatch = getNextMatch();
 
   const handleSimulateWeek = () => {
-    if (league.currentWeek > 17) return;
-
+    // if (league.currentWeek > 17) return; // REMOVED LIMIT
+    
     // Capture the result of the user's game before simulating
     const match = getNextMatch();
     
@@ -52,10 +53,22 @@ export default function SeasonScreen({ route, navigation }) {
     </View>
   );
 
+  const getWeekLabel = () => {
+      if (league.phase === 'regular') return `Week ${currentWeek}`;
+      if (league.phase === 'playoffs') {
+          // Look at first match of current week to get type
+          if (league.weeks[currentWeek-1] && league.weeks[currentWeek-1][0]) {
+              return `Playoffs: ${league.weeks[currentWeek-1][0].type}`;
+          }
+          return "Playoffs";
+      }
+      return "Offseason";
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={[styles.header, { backgroundColor: userTeam.colors.primary }]}>
-        <Text style={styles.weekLabel}>Week {currentWeek > 17 ? 'END' : currentWeek}</Text>
+        <Text style={styles.weekLabel}>{getWeekLabel()}</Text>
         <Text style={styles.headerTeam}>{userTeam.city} {userTeam.name}</Text>
         <Text style={styles.recordLabel}>
           Season Record: {standings.find(s => s.id === userTeamId)?.w} - {standings.find(s => s.id === userTeamId)?.l}
@@ -65,7 +78,7 @@ export default function SeasonScreen({ route, navigation }) {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         
         {/* ACTION AREA */}
-        {currentWeek <= 17 ? (
+        {league.phase !== 'offseason' ? (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Next Matchup</Text>
             {nextMatch ? (
@@ -82,26 +95,51 @@ export default function SeasonScreen({ route, navigation }) {
                   <Text style={styles.vsRating}>{nextMatch.home.ratings.overall} OVR</Text>
                 </View>
               </View>
-            ) : <Text>Bye Week</Text>}
+            ) : <Text style={{marginBottom:10, fontStyle:'italic'}}>No match this week (Bye or eliminated)</Text>}
 
-            <TouchableOpacity 
-              style={styles.simButton} 
-              onPress={() => navigation.navigate('Match', { 
-                  homeId: nextMatch.home.id, 
-                  awayId: nextMatch.away.id 
-              })}
-            >
-              <Text style={styles.simButtonText}>PLAY GAME</Text>
-            </TouchableOpacity>
+            {/* Play Button */}
+            {nextMatch && !nextMatch.played ? (
+                 <TouchableOpacity 
+                  style={styles.simButton} 
+                  onPress={() => navigation.navigate('Match', { 
+                      homeId: nextMatch.home.id, 
+                      awayId: nextMatch.away.id 
+                  })}
+                >
+                  <Text style={styles.simButtonText}>PLAY GAME</Text>
+                </TouchableOpacity>
+            ) : nextMatch && nextMatch.played ? (
+                <View style={[styles.simButton, {backgroundColor:'#555'}]}>
+                    <Text style={styles.simButtonText}>GAME PLAYED</Text>
+                </View>
+            ) : null}
             
-            <TouchableOpacity style={[styles.simButton, {marginTop:10, backgroundColor:'#555'}]} onPress={handleSimulateWeek}>
-              <Text style={styles.simButtonText}>QUICK SIMULATE</Text>
-            </TouchableOpacity>
+            {/* Sim Button */}
+            {(!nextMatch || nextMatch.played) && (
+                <TouchableOpacity style={[styles.simButton, {marginTop:10, backgroundColor:'#333'}]} onPress={handleSimulateWeek}>
+                  <Text style={styles.simButtonText}>
+                      {league.phase === 'playoffs' ? "SIMULATE ROUND" : "SIMULATE WEEK"}
+                  </Text>
+                </TouchableOpacity>
+            )}
+
+            {/* Quick Sim (Only Regular Season) */}
+            {league.phase === 'regular' && (!nextMatch || nextMatch.played) && (
+                <TouchableOpacity style={[styles.simButton, {marginTop:10, backgroundColor:'#777'}]} onPress={() => {
+                    for(let i=0; i<4; i++) league.simulateWeek(league.currentWeek - 1);
+                    setCurrentWeek(league.currentWeek);
+                    setStandings(league.getStandingsSorted());
+                }}>
+                  <Text style={styles.simButtonText}>QUICK SIM (4w)</Text>
+                </TouchableOpacity>
+            )}
           </View>
         ) : (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Season Over</Text>
-            <Text style={{textAlign:'center', marginBottom:20}}>Check the standings to see if you made the playoffs!</Text>
+            <TouchableOpacity style={styles.simButton} onPress={() => alert("Draft Coming Soon!")}>
+                <Text style={styles.simBtnText}>START OFFSEASON</Text>
+            </TouchableOpacity>
           </View>
         )}
 

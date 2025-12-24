@@ -147,16 +147,26 @@ export default function MatchScreen({ route, navigation }) {
       <View style={styles.controls}>
          {!gameState.gameOver ? (
             <>
-                <Text style={styles.playCallTitle}>{isUserOffense ? "CALL PLAY" : "CALL DEFENSE"}</Text>
+                <Text style={styles.playCallTitle}>{isUserOffense ? "CALL OFFENSE" : "CALL DEFENSE"}</Text>
                 <View style={styles.buttonGrid}>
                     {isUserOffense ? (
                         <>
-                        <TouchableOpacity style={styles.playBtn} onPress={() => handlePlayCall(PLAY_TYPES.RUN_INSIDE)}><Text style={styles.btnText}>RUN INSIDE</Text></TouchableOpacity>
-                        <TouchableOpacity style={styles.playBtn} onPress={() => handlePlayCall(PLAY_TYPES.RUN_OUTSIDE)}><Text style={styles.btnText}>RUN OUTSIDE</Text></TouchableOpacity>
-                        <TouchableOpacity style={styles.playBtn} onPress={() => handlePlayCall(PLAY_TYPES.PASS_SHORT)}><Text style={styles.btnText}>PASS SHORT</Text></TouchableOpacity>
-                        <TouchableOpacity style={styles.playBtn} onPress={() => handlePlayCall(PLAY_TYPES.PASS_DEEP)}><Text style={styles.btnText}>PASS DEEP</Text></TouchableOpacity>
-                        <TouchableOpacity style={[styles.playBtn, styles.specialBtn]} onPress={() => handlePlayCall(PLAY_TYPES.PUNT)}><Text style={styles.btnText}>PUNT</Text></TouchableOpacity>
-                        <TouchableOpacity style={[styles.playBtn, styles.specialBtn]} onPress={() => handlePlayCall(PLAY_TYPES.FG)}><Text style={styles.btnText}>FIELD GOAL</Text></TouchableOpacity>
+                        {/* RUNS */}
+                        <TouchableOpacity style={[styles.playBtn, styles.runBtn]} onPress={() => handlePlayCall(PLAY_TYPES.RUN_INSIDE)}><Text style={styles.btnText}>RUN INSIDE</Text></TouchableOpacity>
+                        <TouchableOpacity style={[styles.playBtn, styles.runBtn]} onPress={() => handlePlayCall(PLAY_TYPES.RUN_OUTSIDE)}><Text style={styles.btnText}>RUN OUTSIDE</Text></TouchableOpacity>
+                        <TouchableOpacity style={[styles.playBtn, styles.runBtn]} onPress={() => handlePlayCall(PLAY_TYPES.RUN_DRAW)}><Text style={styles.btnText}>DRAW</Text></TouchableOpacity>
+                        
+                        {/* PASSES */}
+                        <TouchableOpacity style={[styles.playBtn, styles.passBtn]} onPress={() => handlePlayCall(PLAY_TYPES.PASS_SHORT)}><Text style={styles.btnText}>PASS SHORT</Text></TouchableOpacity>
+                        <TouchableOpacity style={[styles.playBtn, styles.passBtn]} onPress={() => handlePlayCall(PLAY_TYPES.PASS_SCREEN)}><Text style={styles.btnText}>SCREEN</Text></TouchableOpacity>
+                        <TouchableOpacity style={[styles.playBtn, styles.passBtn]} onPress={() => handlePlayCall(PLAY_TYPES.PASS_PLAY_ACTION)}><Text style={styles.btnText}>PLAY ACTION</Text></TouchableOpacity>
+                        <TouchableOpacity style={[styles.playBtn, styles.passBtn]} onPress={() => handlePlayCall(PLAY_TYPES.PASS_DEEP)}><Text style={styles.btnText}>PASS DEEP</Text></TouchableOpacity>
+                        
+                        {/* SPECIAL */}
+                        <View style={{flexDirection:'row', width:'100%', justifyContent:'space-between', marginTop:5}}>
+                            <TouchableOpacity style={[styles.playBtn, styles.specialBtn, {width:'48%'}]} onPress={() => handlePlayCall(PLAY_TYPES.PUNT)}><Text style={styles.btnText}>PUNT</Text></TouchableOpacity>
+                            <TouchableOpacity style={[styles.playBtn, styles.specialBtn, {width:'48%'}]} onPress={() => handlePlayCall(PLAY_TYPES.FG)}><Text style={styles.btnText}>FIELD GOAL</Text></TouchableOpacity>
+                        </View>
                         </>
                     ) : (
                         <>
@@ -289,10 +299,17 @@ const styles = StyleSheet.create({
   playBtn: {
     backgroundColor: '#1976d2',
     paddingVertical: 12,
-    paddingHorizontal: 8,
+    paddingHorizontal: 4,
     borderRadius: 6,
-    width: '45%',
+    width: '30%',
     alignItems: 'center',
+    marginBottom: 8,
+  },
+  runBtn: {
+    backgroundColor: '#1565c0', // Darker Blue
+  },
+  passBtn: {
+    backgroundColor: '#0288d1', // Lighter Blue
   },
   defBtn: {
     backgroundColor: '#d32f2f',
