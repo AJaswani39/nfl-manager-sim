@@ -33,9 +33,35 @@ export class MatchEngine {
       awayScore: 0,
       log: [],
       gameOver: false,
+      kickoffPending: false, // New State
     };
     
     this.performCoinToss();
+  }
+
+  resolveKickoff(type) {
+      this.state.kickoffPending = false;
+      
+      if (type === 'ONSIDE') {
+          // 15% chance of recovery
+          const success = Math.random() < 0.15;
+          if (success) {
+              this.addToLog(`ONSIDE KICK RECOVERED by ${this.getOffenseTeam().name}!`);
+              this.state.ballOn = 45; // Recovered at own 45
+              this.state.down = 1; this.state.distance = 10;
+          } else {
+              this.addToLog(`Onside kick failed. Recovered by receiving team.`);
+              this.state.possession = this.state.possession === 'home' ? 'away' : 'home';
+              this.state.ballOn = 55; // Opponent 45
+              this.state.down = 1; this.state.distance = 10;
+          }
+      } else {
+          // Normal Kickoff -> Touchback (Simplification)
+          this.addToLog(`Kickoff! Touchback.`);
+          this.state.possession = this.state.possession === 'home' ? 'away' : 'home';
+          this.state.ballOn = 25;
+          this.state.down = 1; this.state.distance = 10;
+      }
   }
 
   performCoinToss() {
@@ -68,6 +94,17 @@ export class MatchEngine {
     if (type === 'safety_kick') {
         this.addToLog(`Free Kick after Safety from ${this.getOffenseTeam().abbreviation}.`);
         this.state.ballOn = 45; // Receiving team (new possession) gets it at Own 45
+        this.state.possession = this.state.possession === 'home' ? 'away' : 'home';
+        this.state.down = 1; this.state.distance = 10;
+        return;
+    }
+    
+    // SCORE: Don't flip yet. Set Kickoff mode.
+    if (type === 'score') {
+        this.state.kickoffPending = true;
+        this.state.ballOn = 35; // Kickoff spot
+        // Do NOT flip possession. Offense (Scorer) is now Kicking Team.
+        return;
     }
 
     this.state.possession = this.state.possession === 'home' ? 'away' : 'home';
@@ -77,12 +114,9 @@ export class MatchEngine {
     // Default Flip (Downs, Turnover)
     let newLoc = 100 - this.state.ballOn;
 
-    if (type === 'kickoff' || type === 'score') {
-      newLoc = 25; // Touchback 
-      this.addToLog(`Kickoff! ${this.getOffenseTeam().abbreviation} starts at their own 25.`);
-    } else if (type === 'safety_kick') {
-      // Logic handled above (set to 45) but we must respect it
-      newLoc = 45;
+    if (type === 'kickoff') {
+       // Should use resolveKickoff now, but keep fallback
+       newLoc = 25; 
     } else if (type === 'punt') {
       const puntDist = 35 + Math.floor(Math.random() * 25); // 35-60 yds
       const rawLoc = (100 - this.state.ballOn) + puntDist; 
