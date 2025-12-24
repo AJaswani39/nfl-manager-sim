@@ -191,6 +191,8 @@ export class LeagueEngine {
     // Check for Progression triggers
     if (this.currentWeek === 18 && this.phase === 'regular') {
        this.startPlayoffs();
+    } else if (this.phase === 'regular') {
+       this.checkElimination();
     } else if (this.phase === 'playoffs') {
        // Just finished a playoff week, generate next
        const lastRound = weekMatches[0].type;
@@ -201,6 +203,36 @@ export class LeagueEngine {
           this.phase = 'offseason'; // End of season
        }
     }
+  }
+
+  checkElimination() {
+      // MVP logic: If MaxPossibleWins < Seed 7 Wins, Eliminated.
+      const picture = this.getPlayoffPicture();
+      ['AFC', 'NFC'].forEach(conf => {
+          const seeds = picture[conf]; // Top 7 are seeds. Rest are 'In the Hunt' or 'Eliminated'
+          if (seeds.length < 7) return;
+          
+          const seed7 = seeds[6]; // The cutoff
+          const thresholdWins = seed7.w;
+          
+          // Check all teams in this conference
+          const confTeams = this.getStandingsSorted().filter(t => t.conference === conf);
+          
+          confTeams.forEach(team => {
+             const gamesPlayed = team.w + team.l; // + ties? MVP no ties.
+             const gamesRemaining = 17 - gamesPlayed;
+             const maxWins = team.w + gamesRemaining;
+             
+             if (maxWins < thresholdWins) {
+                 this.standings[team.id].eliminated = true;
+             } else {
+                 this.standings[team.id].eliminated = false;
+             }
+             
+             // Check Clinched (If MinWins > Seed 8 MaxWins)
+             // ... Logic for another day
+          });
+      });
   }
 
 // ... existing code ...
