@@ -18,7 +18,7 @@ export class LeagueEngine {
     this.standings = {}; 
     this.playerStats = {}; // { playerId: { passingYards: 0, touchdowns: 0, ... } }
     this.currentWeek = 1;
-    this.phase = 'regular'; // 'regular', 'playoffs', 'offseason'
+    this.phase = 'preseason'; // 'preseason', 'regular', 'playoffs', 'offseason'
     this.initializeStandings();
     this.initializePlayerStats();
   }
@@ -43,7 +43,27 @@ export class LeagueEngine {
   }
 
   generateSchedule() {
-    // [Same schedule logic as before for MVP simplification]
+    // 1. PRESEASON (3 Weeks)
+    // Random matchups, don't care about constraints much
+    for (let w = 1; w <= 3; w++) {
+        const weeklyMatches = [];
+        const teamsPool = shuffle([...TEAMS]);
+        while (teamsPool.length >= 2) {
+            weeklyMatches.push({ 
+                id: `pre_w${w}_${teamsPool.length}`,
+                week: w,
+                home: teamsPool.pop(),
+                away: teamsPool.pop(),
+                played: false,
+                result: null,
+                isPreseason: true,
+                type: 'Preseason'
+            });
+        }
+        this.weeks.push(weeklyMatches);
+    }
+
+    // 2. REGULAR SEASON (17 Weeks)
     for (let w = 1; w <= 17; w++) {
       const weeklyMatches = [];
       const teamsPool = shuffle([...TEAMS]);
@@ -52,12 +72,15 @@ export class LeagueEngine {
         const home = teamsPool.pop();
         const away = teamsPool.pop();
         weeklyMatches.push({ 
-          id: `w${w}_${home.id}_${away.id}`,
-          week: w,
+          id: `reg_w${w}_${home.id}_${away.id}`,
+          week: w, // This "week" property is internal relative to the block, 
+                   // but strictly we access by index in simulateWeek.
           home: home,
           away: away,
           played: false,
-          result: null
+          result: null,
+          isPreseason: false,
+          type: 'Regular'
         });
       }
       this.weeks.push(weeklyMatches);
@@ -162,12 +185,59 @@ export class LeagueEngine {
      };
   }
 
+  applyGameResult(result, gameStats) {
+      if (!result) return;
+      // Find the match in current week or recent weeks
+      // We look for the exact match ID or team combo in currentWeek-1 (since currWeek is 1-based)
+      // Actually we might be in next week if we clicked simulate? No, user plays THEN simulates.
+      
+      const w = this.currentWeek - 1;
+      if (w < 0 || w >= this.weeks.length) return;
+      
+      const match = this.weeks[w].find(m => 
+        (m.home.id === result.homeId && m.away.id === result.awayId) || 
+        (m.home.id === result.awayId && m.away.id === result.homeId)
+      );
+
+      if (!match) return;
+
+      match.result = result;
+      match.played = true;
+
+      // Update Standings (if regular & not preseason)
+      if (this.phase === 'regular' && !match.isPreseason) {
+          this.updateStandings(match.home.id, result.homeScore, result.awayScore);
+          this.updateStandings(match.away.id, result.awayScore, result.homeScore);
+      }
+
+      // Merge Stats
+      if (gameStats) {
+          Object.keys(gameStats).forEach(playerId => {
+              const src = gameStats[playerId];
+              if (!this.playerStats[playerId]) {
+                  this.playerStats[playerId] = { ...src };
+              } else {
+                  const dest = this.playerStats[playerId];
+                  // Safe accumulation
+                  const add = (k) => (dest[k] = (dest[k] || 0) + (src[k] || 0));
+                  add('passingYards'); add('passingTDs'); add('passingAtt'); add('passingComp');
+                  add('rushingYards'); add('rushingTDs'); add('rushingAtt');
+                  add('receivingYards'); add('receivingTDs'); add('receptions');
+                  add('tackles'); add('sacks'); add('interceptions');
+              }
+          });
+      }
+  }
+
   // Update simulateWeek to handle progression
   simulateWeek(weekIndex) {
     if (weekIndex < 0 || weekIndex >= this.weeks.length) return;
     
     const weekMatches = this.weeks[weekIndex];
     let allPlayed = true;
+
+    // Check if this is the start of Regular Season transition?
+    // No, we handle transitions at end of week.
 
     weekMatches.forEach(match => {
       if (match.played) return;
@@ -177,8 +247,18 @@ export class LeagueEngine {
       match.result = { homeScore, awayScore };
       match.played = true;
 
+      // STARTING PRESEASON LOGIC
+      if (match.isPreseason) {
+          // Do NOT update standings.
+          // Optional: Distribute stats? Maybe reduced stats for starters?
+          // For now, let's distribute stats just for fun, or skip to save DB size?
+          // Let's skip stats for Preseason to keep signals clean.
+          return; 
+      }
+
+      // REGULAR & PLAYOFFS
       // Only update Regular Season standings
-      if (this.currentWeek <= 17) {
+      if (this.phase === 'regular' && !match.isPreseason) {
         this.updateStandings(match.home.id, homeScore, awayScore);
         this.updateStandings(match.away.id, awayScore, homeScore);
       }
@@ -188,12 +268,31 @@ export class LeagueEngine {
 
     this.currentWeek++;
 
-    // Check for Progression triggers
-    if (this.currentWeek === 18 && this.phase === 'regular') {
-       this.startPlayoffs();
-    } else if (this.phase === 'regular') {
+    // CHECK PHASE TRANSITIONS
+    // Preseason is index 0, 1, 2 (Weeks 1-3).
+    // Regular is index 3..19 (Weeks 4-20) -> labeled Week 1-17
+    
+    // We just finished weekIndex.
+    // If we finished index 2 (Preseason Week 3), next is index 3 (Reg Week 1)
+    if (weekIndex === 2) { 
+        this.phase = 'regular';
+    }
+    
+    // If we finished index 19 (Reg Week 17), next is Playoffs
+    // Preseason(3) + Regular(17) = 20 weeks total. Indices 0-19.
+    // So if this.currentWeek (which was just incremented) is > 20...
+    // this.currentWeek is now weekIndex + 2 effectively? (starts at 1)
+    // Let's track strictly by index
+    
+    const totalRegWeeks = 3 + 17; // 20
+    if (this.currentWeek > totalRegWeeks && this.phase === 'regular') {
+       this.phase = 'playoffs'; // Transition state for UI
+       this.startPlayoffs(); 
+    } 
+    else if (this.phase === 'regular') {
        this.checkElimination();
-    } else if (this.phase === 'playoffs') {
+    } 
+    else if (this.phase === 'playoffs') {
        // Just finished a playoff week, generate next
        const lastRound = weekMatches[0].type;
        if (lastRound === 'Wild Card') this.generatePlayoffRound('Divisional');
@@ -481,7 +580,7 @@ export class LeagueEngine {
   startNewSeason() {
       // 1. Reset Week
       this.currentWeek = 1;
-      this.phase = 'regular';
+      this.phase = 'preseason';
       this.weeks = [];
       
       // 2. Reset Standings

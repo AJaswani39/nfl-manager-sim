@@ -19,6 +19,29 @@ export default function SeasonScreen({ route, navigation }) {
     return unsubscribe;
   }, [navigation]);
 
+  useEffect(() => {
+    if (route.params?.result) {
+      const { result, playerStats } = route.params;
+      league.applyGameResult(result, playerStats);
+      
+      navigation.setParams({ result: null, playerStats: null });
+      
+      setCurrentWeek(league.currentWeek);
+      setStandings(league.getStandingsSorted());
+      
+      // Show result feedback
+      const oppId = result.homeId === userTeamId ? result.awayId : result.homeId;
+      const oppTeam = TEAMS.find(t => t.id === oppId);
+      
+      setRecentResult({
+        won: (result.homeScore > result.awayScore && result.homeId === userTeamId) || 
+             (result.awayScore > result.homeScore && result.awayId === userTeamId),
+        score: `${result.awayScore} - ${result.homeScore}`,
+        opponent: oppTeam ? oppTeam.abbreviation : 'OPP'
+      });
+    }
+  }, [route.params?.result]);
+
   // Helper: Get user's match for this week
   const getNextMatch = () => {
     // if (league.currentWeek > 17) return null; // REMOVED LIMIT
@@ -67,7 +90,8 @@ export default function SeasonScreen({ route, navigation }) {
   );
 
   const getWeekLabel = () => {
-      if (league.phase === 'regular') return `Week ${currentWeek}`;
+      if (league.phase === 'preseason') return `Preseason Week ${currentWeek}`;
+      if (league.phase === 'regular') return `Week ${currentWeek - 3}`;
       if (league.phase === 'playoffs') {
           // Look at first match of current week to get type
           if (league.weeks[currentWeek-1] && league.weeks[currentWeek-1][0]) {
@@ -201,7 +225,7 @@ export default function SeasonScreen({ route, navigation }) {
         </View>
 
         {/* PLAYOFF ODDS (Week 13+) */}
-        {currentWeek >= 13 && (
+        {currentWeek >= 16 && (
           <View style={styles.section}>
              <Text style={styles.sectionTitle}>Playoff Hunt (Odds to Make)</Text>
              {league.getStandingsSorted().filter((_, i) => i < 16).map(team => {
@@ -219,7 +243,7 @@ export default function SeasonScreen({ route, navigation }) {
         )}
 
         {/* BRACKET PREVIEW */}
-        {currentWeek >= 13 && (
+        {currentWeek >= 16 && (
            <View style={{margin:16, marginTop:0}}>
               <Text style={styles.sectionTitle}>Projected Playoff Matchups</Text>
               

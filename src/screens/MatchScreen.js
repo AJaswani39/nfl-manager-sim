@@ -1,20 +1,23 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, Text, View, SafeAreaView, TouchableOpacity, ScrollView, Animated } from 'react-native';
+import { StyleSheet, Text, View, SafeAreaView, TouchableOpacity, ScrollView, Animated, Modal } from 'react-native';
 import { MatchEngine, PLAY_TYPES, DEFENSE_TYPES } from '../engine/MatchEngine';
 import { TEAMS } from '../data/teams';
 import { league } from '../engine/LeagueEngine';
 
 export default function MatchScreen({ route, navigation }) {
-  const { homeId, awayId } = route.params;
+  const { homeId, awayId, isPlayoff } = route.params;
   const homeTeam = TEAMS.find(t => t.id === homeId);
   const awayTeam = TEAMS.find(t => t.id === awayId);
 
   // We keep the engine instance in a ref so it persists across renders without re-initializing
-  const engineRef = useRef(new MatchEngine(homeTeam, awayTeam));
+  const engineRef = useRef(new MatchEngine(homeTeam, awayTeam, isPlayoff));
   const engine = engineRef.current; // Shorthand
 
   // We need React State to force re-renders when the engine state changes
   const [gameState, setGameState] = useState({...engine.state});
+  
+  // Store context for resuming plays after event interruption
+  const [pendingContext, setPendingContext] = useState(null); 
 
   const handleKickoffCall = (type) => {
       // User is kicking
@@ -38,9 +41,9 @@ export default function MatchScreen({ route, navigation }) {
     }
 
     // Normal Play Logic
+    
     // 1. AI Choice
     let aiChoice;
-    // ... rest of logic
     const isUserOff = engine.state.possession === 'home'; 
     
     if (!isUserOff) {
@@ -49,22 +52,62 @@ export default function MatchScreen({ route, navigation }) {
         if (roll < 0.4) aiChoice = PLAY_TYPES.RUN_INSIDE;
         else if (roll < 0.7) aiChoice = PLAY_TYPES.PASS_SHORT;
         else aiChoice = PLAY_TYPES.PASS_DEEP;
-        
-        // Resolve: AI (Off) vs User (Def)
-        engine.resolvePlay(aiChoice, userChoice);
     } else {
         // AI is Defense
         const roll = Math.random();
         if (roll < 0.4) aiChoice = DEFENSE_TYPES.RUN_DEFENSE;
         else if (roll < 0.8) aiChoice = DEFENSE_TYPES.PASS_COVERAGE;
         else aiChoice = DEFENSE_TYPES.BLITZ;
-
-        // Resolve: User (Off) vs AI (Def)
-        engine.resolvePlay(userChoice, aiChoice);
     }
 
-    // 2. Update React State
-    setGameState({...engine.state});
+    // 2. CHECK FOR RANDOM EVENTS INTERRUPTIONS
+    const interrupted = engine.checkRandomEvents(isUserOff ? userChoice : null);
+    if (interrupted) {
+        // Save context so we can resume after modal
+        setPendingContext({ userChoice, aiChoice, isUserOff });
+        setGameState({...engine.state}); // Trigger re-render to show modal
+        return;
+    }
+
+    // 3. Resolve Normally if no interrupt
+    resolvePlayFinal(userChoice, aiChoice, isUserOff);
+  };
+
+  const resolvePlayFinal = (userChoice, aiChoice, isUserOff) => {
+      if (!isUserOff) {
+        // Resolve: AI (Off) vs User (Def)
+        engine.resolvePlay(aiChoice, userChoice);
+      } else {
+        // Resolve: User (Off) vs AI (Def)
+        engine.resolvePlay(userChoice, aiChoice);
+      }
+      setGameState({...engine.state});
+  };
+
+  const handleEventDecision = (action) => {
+      // 1. Tell engine to resolve the event
+      const result = engine.resolveEvent(action);
+      
+      // 2. If result has a newPlay, we resume execution with stored context
+      if (result && pendingContext) {
+          if (result.newPlay) {
+              // It was an audible or something changing the play
+              // User (Offense) changed play -> result.newPlay
+              // Context has AI choice
+              
+              // NOTE: checkRandomEvents only triggers for User Offense Audibles currently
+              resolvePlayFinal(result.newPlay, pendingContext.aiChoice, pendingContext.isUserOff);
+          } else {
+             // Null play (e.g. penalty just happened, dead ball).
+             // Just update state
+             setGameState({...engine.state});
+          }
+      } else {
+          // Just update state (e.g. modal closed)
+          setGameState({...engine.state});
+      }
+      
+      setPendingContext(null);
   };
 
   const handleExitGame = () => {
@@ -75,9 +118,14 @@ export default function MatchScreen({ route, navigation }) {
       homeId: homeId,
       awayId: awayId
     };
+    
+    // Get stats from engine
+    const playerStats = engine.getMatchStats();
+    
     navigation.navigate('Season', {
       userTeamId: homeId,
-      result: result
+      result: result,
+      playerStats: playerStats
     });
   };
 
@@ -85,16 +133,33 @@ export default function MatchScreen({ route, navigation }) {
     const yard = gameState.ballOn;
     if (yard <= 0) return "ENDZONE";
     if (yard >= 100) return "ENDZONE";
-    if (gameState.possession === 'home') {
-      return `HOME ${yard}`;
+    
+    // Logic: 0-50 is "Own", 50-100 is "Opponent"
+    // BUT we need to label them by Team Name
+    const isHomePoss = gameState.possession === 'home';
+    const offTeam = isHomePoss ? homeTeam.abbreviation : awayTeam.abbreviation;
+    const defTeam = isHomePoss ? awayTeam.abbreviation : homeTeam.abbreviation;
+    
+    if (yard <= 50) {
+        return `${offTeam} ${yard}`;
     } else {
-      return `AWAY ${100 - yard}`;
+        return `${defTeam} ${100 - yard}`;
     }
   };
 
   const renderField = () => {
     // Calculate position of football and lines
-    const ballX = (gameState.ballOn / 100) * 100; // Percentage across field
+    // MatchEngine 'ballOn' is always relative to Offense (0 -> 100)
+    // Home drives Left -> Right (0 -> 100)
+    // Away drives Right -> Left (100 -> 0)
+    
+    let ballX = gameState.ballOn;
+    let driveDir = 1; // 1 for L->R, -1 for R->L
+    
+    if (gameState.possession === 'away') {
+        ballX = 100 - gameState.ballOn;
+        driveDir = -1;
+    }
     
     return (
       <View style={styles.fieldContainer}>
@@ -120,7 +185,7 @@ export default function MatchScreen({ route, navigation }) {
           {gameState.distance > 0 && (
             <View
               style={[styles.firstDownLine, {
-                left: `${Math.min(100, ballX + (gameState.distance / 100) * 100)}%`
+                left: `${Math.min(100, Math.max(0, ballX + (gameState.distance * driveDir)))}%` 
               }]}
             />
           )}
@@ -177,6 +242,26 @@ export default function MatchScreen({ route, navigation }) {
              <Text key={i} style={[styles.logEntry, i===0 && styles.latestLog]}>{entry}</Text>
          ))}
       </ScrollView>
+
+       {/* EVENT MODAL */}
+       {gameState.pendingEvent && (
+          <Modal transparent={true} animationType="fade" visible={true}>
+              <View style={styles.modalOverlay}>
+                  <View style={styles.modalContent}>
+                      <Text style={styles.modalTitle}>{gameState.pendingEvent.title}</Text>
+                      <Text style={styles.modalMessage}>{gameState.pendingEvent.message}</Text>
+                      
+                      <View style={styles.modalButtons}>
+                          {gameState.pendingEvent.options.map((opt, i) => (
+                              <TouchableOpacity key={i} style={styles.modalBtn} onPress={() => handleEventDecision(opt.action)}>
+                                  <Text style={styles.modalBtnText}>{opt.label}</Text>
+                              </TouchableOpacity>
+                          ))}
+                      </View>
+                  </View>
+              </View>
+          </Modal>
+       )}
 
       {/* CONTROLS */}
       <View style={styles.controls}>
@@ -392,6 +477,53 @@ const styles = StyleSheet.create({
       fontSize: 18,
       letterSpacing: 1,
   },
+  modalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.8)',
+      justifyContent: 'center',
+      alignItems: 'center',
+  },
+  modalContent: {
+      width: '80%',
+      backgroundColor: '#222',
+      borderRadius: 16,
+      padding: 24,
+      borderWidth: 2,
+      borderColor: '#fdd835',
+      alignItems: 'center',
+  },
+  modalTitle: {
+      color: '#fdd835',
+      fontSize: 24,
+      fontWeight: 'bold',
+      marginBottom: 12,
+      textAlign: 'center',
+      textTransform: 'uppercase',
+  },
+  modalMessage: {
+      color: '#fff',
+      fontSize: 16,
+      textAlign: 'center',
+      marginBottom: 24,
+      lineHeight: 24,
+  },
+  modalButtons: {
+      flexDirection: 'row',
+      justifyContent: 'center',
+      gap: 16,
+      width: '100%',
+  },
+  modalBtn: {
+      backgroundColor: '#1976d2',
+      paddingVertical: 12,
+      paddingHorizontal: 24,
+      borderRadius: 8,
+      minWidth: 100,
+      alignItems: 'center',
+  },
+  modalBtnText: {
+      color: '#fff',
+      fontWeight: 'bold',
+      fontSize: 16,
+  }
 });
-
-
