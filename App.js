@@ -9,6 +9,7 @@ import SeasonScreen from './src/screens/SeasonScreen';
 import MatchScreen from './src/screens/MatchScreen';
 import DraftScreen from './src/screens/DraftScreen';
 import BoxScoreScreen from './src/screens/BoxScoreScreen';
+import NewsScreen from './src/screens/NewsScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -57,6 +58,11 @@ export default function App() {
             headerStyle: { backgroundColor: '#000' },
             headerTintColor: '#fff',
           }}
+        />
+        <Stack.Screen 
+          name="News" 
+          component={NewsScreen} 
+          options={{ headerShown: false }} 
         />
         <Stack.Screen 
           name="Draft" 

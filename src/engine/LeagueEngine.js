@@ -18,6 +18,8 @@ export class LeagueEngine {
     this.standings = {}; 
     this.playerStats = {}; // { playerId: { passingYards: 0, touchdowns: 0, ... } }
     this.playerState = {}; // { playerId: { weeksOut: 0 } }
+    this.news = []; // Array of { message, type, week }
+    this.rosters = JSON.parse(JSON.stringify(ROSTERS)); // Mutable Rosters
     this.currentWeek = 1;
     this.phase = 'preseason'; // 'preseason', 'regular', 'playoffs', 'offseason'
     this.initializeStandings();
@@ -540,6 +542,36 @@ export class LeagueEngine {
   }
   // DRAFT & OFFSEASON
   
+  addNews(message, type = 'general') {
+       this.news.unshift({
+           message,
+           type, 
+           week: this.currentWeek,
+           timestamp: Date.now()
+       });
+       if (this.news.length > 50) this.news.pop();
+   }
+
+   generateTransactions() {
+        const actions = [
+            "signed a 1-year extension.",
+            "is testing Free Agency.",
+            "demanded a trade.",
+            "was seen training with a new QB coach.",
+            "guarantees a playoff spot this year."
+        ];
+        
+        for(let i=0; i<3; i++) {
+             const teamId = TEAMS[Math.floor(Math.random()*TEAMS.length)].id;
+             const roster = this.rosters[teamId];
+             if (roster && roster.length > 0) {
+                 const p = roster[Math.floor(Math.random()*roster.length)];
+                 const action = actions[Math.floor(Math.random()*actions.length)];
+                 this.addNews(`${p.name} (${p.position}) ${action}`, 'transaction');
+             }
+        }
+   }
+
   generateDraftClass() {
      const positions = ['QB', 'RB', 'WR', 'TE', 'OL', 'DL', 'LB', 'CB', 'S'];
      const firstNames = ['DeAndre', 'Marcus', 'Caleb', 'Trevor', 'Kenny', 'Jalen', 'Sauce', 'Tyreek', 'Justin', 'Patrick', 'Joe'];
@@ -581,9 +613,11 @@ export class LeagueEngine {
          // CPU Pick: Best available
          const pick = this.draftClass.shift(); 
          if (pick) {
+            pick.stats = {}; // Init stats
+            if (!this.rosters[teamId]) this.rosters[teamId] = [];
+            this.rosters[teamId].push(pick);
+
             displayLog.push({ type: 'pick', teamId: teamId, player: pick });
-            // Add to roster (simplified: replace worst player or just add)
-            // For MVP we just console log it effectively, real roster mgmt is complex
          }
          this.currentPickIndex++;
      }
@@ -592,6 +626,11 @@ export class LeagueEngine {
 
   userSelectPlayer(userTeamId, playerIndex) {
       const pick = this.draftClass.splice(playerIndex, 1)[0];
+      
+      pick.stats = {};
+      if (!this.rosters[userTeamId]) this.rosters[userTeamId] = [];
+      this.rosters[userTeamId].push(pick);
+
       this.currentPickIndex++; // Move past user
       return pick;
   }
@@ -614,12 +653,54 @@ export class LeagueEngine {
       this.generateSchedule();
       
       // 5. Progression (Simple)
-      TEAMS.forEach(t => {
-          // Random fluctuation in team ratings
-          t.ratings.offense = Math.max(60, Math.min(99, t.ratings.offense + Math.floor(Math.random()*6)-3));
-          t.ratings.defense = Math.max(60, Math.min(99, t.ratings.defense + Math.floor(Math.random()*6)-3));
-          t.ratings.overall = Math.round((t.ratings.offense + t.ratings.defense)/2);
+      // 5. Progression & Retirement
+      Object.keys(this.rosters).forEach(teamId => {
+          const roster = this.rosters[teamId];
+          const kept = [];
+          
+          roster.forEach(p => {
+              p.age++;
+              
+              // Retirement Check
+              let retireChance = 0;
+              if (p.age > 40) retireChance = 1.0;
+              else if (p.age > 35) retireChance = 0.4; // 40% chance if > 35
+              else if (p.age > 32) retireChance = 0.1; // 10% chance if > 32
+              
+              // QBs play longer
+              if (p.position === 'QB') retireChance *= 0.5;
+
+              if (Math.random() < retireChance) {
+                  this.addNews(`${p.name} (${p.position}) has retired after ${p.age - 21} seasons.`, 'retire');
+              } else {
+                  // Ratings Progression
+                  let change = 0;
+                  if (p.age < 25) change = Math.floor(Math.random() * 5) + 1; // Big jumps for rookies
+                  else if (p.age < 28) change = Math.floor(Math.random() * 3); // Steady
+                  else if (p.age > 31) change = -1 * (Math.floor(Math.random() * 4) + 1); // Decline
+                  
+                  p.overall = Math.max(50, Math.min(99, p.overall + change));
+                  kept.push(p);
+              }
+          });
+          
+          this.rosters[teamId] = kept;
+          
+          // Update Team Ratings based on new roster
+          if (kept.length > 0) {
+              const totalOvr = kept.reduce((sum, p) => sum + p.overall, 0);
+              const avgOvr = Math.round(totalOvr / kept.length);
+              
+              const team = TEAMS.find(t => t.id === teamId);
+              if (team) {
+                  team.ratings.overall = avgOvr;
+                  team.ratings.offense = avgOvr; // Simplified
+                  team.ratings.defense = avgOvr; 
+              }
+          }
       });
+      
+      this.generateTransactions();
   }
 }
 

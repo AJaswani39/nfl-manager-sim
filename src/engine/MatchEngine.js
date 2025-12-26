@@ -16,10 +16,9 @@ export const DEFENSE_TYPES = {
   BLITZ: 'BLITZ',
 };
 
-import { ROSTERS } from '../data/rosters';
 
 export class MatchEngine {
-  constructor(homeTeam, awayTeam, isPlayoff = false, injuries = {}) {
+  constructor(homeTeam, awayTeam, homeRoster, awayRoster, isPlayoff = false, injuries = {}) {
     this.homeTeam = homeTeam;
     this.awayTeam = awayTeam;
     this.isPlayoff = isPlayoff;
@@ -43,8 +42,8 @@ export class MatchEngine {
     };
 
     this.playerStats = {}; 
-    this.homeRoster = ROSTERS[this.homeTeam.id] || [];
-    this.awayRoster = ROSTERS[this.awayTeam.id] || [];
+    this.homeRoster = homeRoster || [];
+    this.awayRoster = awayRoster || [];
     
     this.performCoinToss();
   }

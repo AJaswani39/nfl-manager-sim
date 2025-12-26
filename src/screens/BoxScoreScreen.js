@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, View, SafeAreaView, TouchableOpacity, ScrollView } from 'react-native';
 import { TEAMS } from '../data/teams';
-import { ROSTERS } from '../data/rosters';
+// Removed ROSTERS import
+import { league } from '../engine/LeagueEngine';
 
 export default function BoxScoreScreen({ route, navigation }) {
   const { result, playerStats, userTeamId, injuries } = route.params;
@@ -14,7 +15,7 @@ export default function BoxScoreScreen({ route, navigation }) {
 
   const getTeamStats = (teamId) => {
       // Get all players with stats for this team
-      const roster = ROSTERS[teamId] || [];
+      const roster = league.rosters[teamId] || [];
       const rosterIds = new Set(roster.map(p => p.id));
       
       const stats = [];

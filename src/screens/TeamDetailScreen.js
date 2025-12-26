@@ -7,7 +7,7 @@ import { league } from '../engine/LeagueEngine';
 export default function TeamDetailScreen({ route, navigation }) {
   const { teamId } = route.params;
   const team = TEAMS.find(t => t.id === teamId);
-  const players = ROSTERS[teamId] || [];
+  const players = league.rosters[teamId] || [];
 
   const getPositionColor = (pos) => {
     if (['QB', 'RB', 'WR', 'TE'].includes(pos)) return '#e3f2fd'; // Offense Blue

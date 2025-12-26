@@ -10,7 +10,14 @@ export default function MatchScreen({ route, navigation }) {
   const awayTeam = TEAMS.find(t => t.id === awayId);
 
   // We keep the engine instance in a ref so it persists across renders without re-initializing
-  const engineRef = useRef(new MatchEngine(homeTeam, awayTeam, isPlayoff, injuries));
+  const engineRef = useRef(new MatchEngine(
+      homeTeam, 
+      awayTeam, 
+      league.rosters[homeId], 
+      league.rosters[awayId], 
+      isPlayoff, 
+      injuries
+  ));
   const engine = engineRef.current; // Shorthand
 
   // We need React State to force re-renders when the engine state changes
