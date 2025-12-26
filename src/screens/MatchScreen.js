@@ -67,11 +67,76 @@ export default function MatchScreen({ route, navigation }) {
     setGameState({...engine.state});
   };
 
-  // ... handleExitGame ...
+  const handleExitGame = () => {
+    // Navigate back to Season screen with result
+    const result = {
+      homeScore: gameState.homeScore,
+      awayScore: gameState.awayScore,
+      homeId: homeId,
+      awayId: awayId
+    };
+    navigation.navigate('Season', {
+      userTeamId: homeId,
+      result: result
+    });
+  };
 
-  // ... getBallLocationText ...
+  const getBallLocationText = () => {
+    const yard = gameState.ballOn;
+    if (yard <= 0) return "ENDZONE";
+    if (yard >= 100) return "ENDZONE";
+    if (gameState.possession === 'home') {
+      return `HOME ${yard}`;
+    } else {
+      return `AWAY ${100 - yard}`;
+    }
+  };
 
-  // ... renderField ...
+  const renderField = () => {
+    // Calculate position of football and lines
+    const ballX = (gameState.ballOn / 100) * 100; // Percentage across field
+    
+    return (
+      <View style={styles.fieldContainer}>
+        <View style={styles.endzoneLeft}>
+          <Text style={styles.endzoneText}>{homeTeam.abbreviation}</Text>
+        </View>
+        
+        <View style={styles.fieldSurface}>
+          {/* Yard lines */}
+          {[10, 20, 30, 40, 50, 60, 70, 80, 90].map(yard => (
+            <View
+              key={yard}
+              style={[styles.yardLine, { left: `${yard}%` }]}
+            />
+          ))}
+          
+          {/* Line of scrimmage */}
+          <View
+            style={[styles.los, { left: `${ballX}%` }]}
+          />
+          
+          {/* First down line */}
+          {gameState.distance > 0 && (
+            <View
+              style={[styles.firstDownLine, {
+                left: `${Math.min(100, ballX + (gameState.distance / 100) * 100)}%`
+              }]}
+            />
+          )}
+          
+          {/* Football */}
+          <View
+            style={[styles.football, { left: `${ballX}%` }]}
+          />
+        </View>
+        
+        <View style={styles.endzoneRight}>
+          <Text style={styles.endzoneText}>{awayTeam.abbreviation}</Text>
+        </View>
+      </View>
+    );
+  };
 
   const isUserOffense = gameState.possession === 'home'; // User is always Home for MVP
 
