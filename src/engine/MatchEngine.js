@@ -408,6 +408,7 @@ export class MatchEngine {
     let yardsGained = 0;
     let description = "";
     let turnover = false;
+    let turnoverPlayer = null; // Track who got the ball
     let touchdown = false;
 
     // Modifiers
@@ -424,7 +425,11 @@ export class MatchEngine {
           yardsGained = Math.floor(Math.random() * 3) - 1; 
           description = `${rb.name} stuffed at the line by ${dl.name}!`;
           this.recordStat(dl, 'tackles', 1);
-          if (Math.random() < 0.02) { turnover = true; description = `FUMBLE! ${rb.name} loses the ball! Recovered by ${dl.name}!`; }
+          if (Math.random() < 0.02) { 
+              turnover = true; 
+              turnoverPlayer = dl;
+              description = `FUMBLE! ${rb.name} loses the ball! Recovered by ${dl.name}!`; 
+          }
         } else if (defChoice === DEFENSE_TYPES.BLITZ) {
            yardsGained = Math.floor(Math.random() * 12) + 4; 
            description = `${rb.name} breaks through the blitz!`;
@@ -478,7 +483,9 @@ export class MatchEngine {
           else { 
              yardsGained = 0; description = `${qb.name}'s pass incomplete.`; 
              if (Math.random() < 0.05) { 
-                 turnover = true; description = `INTERCEPTED by ${lb.name}!`; 
+                 turnover = true; 
+                 turnoverPlayer = lb;
+                 description = `INTERCEPTED by ${lb.name}!`; 
                  this.recordStat(qb, 'interceptions', 1); this.recordStat(lb, 'interceptions', 1);
                  yardsGained = 0; 
              }
@@ -504,7 +511,9 @@ export class MatchEngine {
             this.recordStat(qb, 'passingComp', 1); this.recordStat(rb, 'receptions', 1); // Completed for loss
             this.recordStat(tackler, 'tackles', 1);
             if (Math.random() < 0.05) { 
-                turnover = true; description = `Screen pass JUMPED by ${dl.name}! INTERCEPTION!`; 
+                turnover = true; 
+                turnoverPlayer = dl;
+                description = `Screen pass JUMPED by ${dl.name}! INTERCEPTION!`; 
                 this.recordStat(qb, 'interceptions', 1); this.recordStat(dl, 'interceptions', 1);
             }
          } else {
@@ -523,7 +532,11 @@ export class MatchEngine {
          } else if (defChoice === DEFENSE_TYPES.BLITZ) {
              yardsGained = -7; description = `SACK! ${dl.name} gets to ${qb.name}!`;
              this.recordStat(dl, 'sacks', 1);
-             if (Math.random() < 0.15) { turnover = true; description = `STRIP SACK! ${qb.name} loses it! Recovered by ${dl.name}!`; }
+             if (Math.random() < 0.15) { 
+                 turnover = true; 
+                 turnoverPlayer = dl;
+                 description = `STRIP SACK! ${qb.name} loses it! Recovered by ${dl.name}!`; 
+             }
          } else {
              yardsGained = Math.floor(Math.random() * 10);
              description = `Coverage holds up.`; // Incomplete? Or checkdown? Let's say checkdown
@@ -547,7 +560,9 @@ export class MatchEngine {
           else { 
              yardsGained = 0; description = `Deep pass to ${wr.name} incomplete.`;
              if (Math.random() < 0.12) { 
-                 turnover = true; description = `INTERCEPTED deep by ${db.name}!`; 
+                 turnover = true; 
+                 turnoverPlayer = db;
+                 description = `INTERCEPTED deep by ${db.name}!`; 
                  this.recordStat(qb, 'interceptions', 1); this.recordStat(db, 'interceptions', 1);
                  yardsGained = -10; 
              }
@@ -556,7 +571,11 @@ export class MatchEngine {
           if (Math.random() < 0.35) { 
              yardsGained = -8; description = `SACKED! ${dl.name} buries ${qb.name}!`; 
              this.recordStat(dl, 'sacks', 1);
-             if (Math.random() < 0.20) { turnover = true; description = `STRIP SACK! ${dl.name} forces the fumble!`; }
+             if (Math.random() < 0.20) { 
+                 turnover = true; 
+                 turnoverPlayer = dl;
+                 description = `STRIP SACK! ${dl.name} forces the fumble!`; 
+             }
           } else { 
              yardsGained = 60; touchdown = true; description = `BOMB! ${qb.name} hits ${wr.name} for a TOUCHDOWN!`; 
              this.recordStat(qb, 'passingComp', 1); this.recordStat(wr, 'receptions', 1);
@@ -591,7 +610,9 @@ export class MatchEngine {
     if (turnover) {
       if (Math.random() < 0.08) { // 8% chance on a turnover
          this.scoreDefense(7);
-         this.addToLog(description + " DEFENSE RETURNS IT FOR A TOUCHDOWN!!!");
+         const returnerName = turnoverPlayer ? turnoverPlayer.name : "DEFENSE";
+         this.addToLog(description + ` ${returnerName} RETURNS IT FOR A TOUCHDOWN!!!`);
+         if (turnoverPlayer) this.recordStat(turnoverPlayer, 'defTDs', 1);
          this.changePossession('score');
       } else {
          this.addToLog(description);
