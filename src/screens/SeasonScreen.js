@@ -164,7 +164,8 @@ export default function SeasonScreen({ route, navigation }) {
                   style={styles.simButton} 
                   onPress={() => navigation.navigate('Match', { 
                       homeId: nextMatch.home.id, 
-                      awayId: nextMatch.away.id 
+                      awayId: nextMatch.away.id,
+                      userTeamId: userTeamId
                   })}
                 >
                   <Text style={styles.simButtonText}>PLAY GAME</Text>

@@ -192,13 +192,22 @@ export class MatchEngine {
               }
 
               // Muff Chance
-              if (Math.random() < 0.01) {
-                  this.addToLog("MUFFED KICKOFF! Recovered by Kicking Team!");
-                  this.state.possession = this.state.possession === 'home' ? 'away' : 'home'; // Flip back to Kicking Team
-                  this.state.ballOn = 20; // Recovered deep
-                  this.state.down = 1; this.state.distance = 10;
+              if (Math.random() < 0.02) {
+                  if (Math.random() < 0.5) {
+                      // Lost Fumble
+                      this.addToLog("MUFFED KICKOFF! Recovered by Kicking Team!");
+                      this.state.possession = this.state.possession === 'home' ? 'away' : 'home'; // Flip back to Kicking Team
+                      this.state.ballOn = 20; // Recovered deep
+                      this.state.down = 1; this.state.distance = 10;
+                  } else {
+                      // Recovered
+                      this.addToLog("MUFFED KICKOFF! But recovered by the Return Team at the 10.");
+                      this.state.ballOn = 10; // Pinned deep
+                      this.state.down = 1; this.state.distance = 10;
+                  }
                   return;
               }
+
 
               // Standard Return
               // Kick starts from 35. Lands at (35 + kickDist).
@@ -293,15 +302,18 @@ export class MatchEngine {
           
           // Muffed Catch Chance (3%)
           if (Math.random() < 0.03) {
-               this.addToLog("MUFFED PUNT! Recovered by Kicking Team!");
-               // Revert possession change
-               this.state.possession = this.state.possession === 'home' ? 'away' : 'home';
-               this.state.ballOn = landingSpot; // Recover at landing spot
-               this.state.down = 1; this.state.distance = 10;
-               return; // Exit
-          }
-
-          if (pinned) {
+               if (Math.random() < 0.5) {
+                   this.addToLog("MUFFED PUNT! Recovered by Kicking Team!");
+                   // Revert possession change
+                   this.state.possession = this.state.possession === 'home' ? 'away' : 'home';
+                   this.state.ballOn = landingSpot; 
+                   this.state.down = 1; this.state.distance = 10;
+                   return; 
+               } else {
+                   newLoc = 100 - landingSpot;
+                   this.addToLog(`Muffed Punt! Recovered by Return Team at the ${this.getYardLineText(newLoc)}.`);
+               }
+          } else if (pinned) {
               const spot = 100 - landingSpot;
               newLoc = spot;
               this.addToLog(`Perfect Punt! Pinned at the ${this.getYardLineText(spot)}!`);
@@ -425,10 +437,15 @@ export class MatchEngine {
           yardsGained = Math.floor(Math.random() * 3) - 1; 
           description = `${rb.name} stuffed at the line by ${dl.name}!`;
           this.recordStat(dl, 'tackles', 1);
-          if (Math.random() < 0.02) { 
-              turnover = true; 
-              turnoverPlayer = dl;
-              description = `FUMBLE! ${rb.name} loses the ball! Recovered by ${dl.name}!`; 
+          if (Math.random() < 0.04) { 
+              if (Math.random() < 0.5) {
+                  turnover = true; 
+                  turnoverPlayer = dl;
+                  description = `FUMBLE! ${rb.name} loses the ball! Recovered by ${dl.name}!`; 
+              } else {
+                  description = `FUMBLE! ${rb.name} bobbles it but recovers!`;
+                  yardsGained = 0;
+              }
           }
         } else if (defChoice === DEFENSE_TYPES.BLITZ) {
            yardsGained = Math.floor(Math.random() * 12) + 4; 
@@ -532,10 +549,14 @@ export class MatchEngine {
          } else if (defChoice === DEFENSE_TYPES.BLITZ) {
              yardsGained = -7; description = `SACK! ${dl.name} gets to ${qb.name}!`;
              this.recordStat(dl, 'sacks', 1);
-             if (Math.random() < 0.15) { 
-                 turnover = true; 
-                 turnoverPlayer = dl;
-                 description = `STRIP SACK! ${qb.name} loses it! Recovered by ${dl.name}!`; 
+             if (Math.random() < 0.20) { 
+                 if (Math.random() < 0.5) {
+                     turnover = true; 
+                     turnoverPlayer = dl;
+                     description = `STRIP SACK! ${qb.name} loses it! Recovered by ${dl.name}!`; 
+                 } else {
+                     description = `STRIP SACK! ${qb.name} fumbles but recovers!`;
+                 }
              }
          } else {
              yardsGained = Math.floor(Math.random() * 10);
@@ -571,10 +592,14 @@ export class MatchEngine {
           if (Math.random() < 0.35) { 
              yardsGained = -8; description = `SACKED! ${dl.name} buries ${qb.name}!`; 
              this.recordStat(dl, 'sacks', 1);
-             if (Math.random() < 0.20) { 
-                 turnover = true; 
-                 turnoverPlayer = dl;
-                 description = `STRIP SACK! ${dl.name} forces the fumble!`; 
+             if (Math.random() < 0.25) { 
+                 if (Math.random() < 0.5) {
+                     turnover = true; 
+                     turnoverPlayer = dl;
+                     description = `STRIP SACK! ${dl.name} forces the fumble! Recovered by Defense!`; 
+                 } else {
+                     description = `STRIP SACK! ${dl.name} forces the fumble but ${qb.name} recovers!`;
+                 }
              }
           } else { 
              yardsGained = 60; touchdown = true; description = `BOMB! ${qb.name} hits ${wr.name} for a TOUCHDOWN!`; 

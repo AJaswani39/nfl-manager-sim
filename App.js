@@ -8,6 +8,7 @@ import SeasonScreen from './src/screens/SeasonScreen';
 
 import MatchScreen from './src/screens/MatchScreen';
 import DraftScreen from './src/screens/DraftScreen';
+import BoxScoreScreen from './src/screens/BoxScoreScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -65,6 +66,16 @@ export default function App() {
             headerStyle: { backgroundColor: '#1e272e' },
             headerTintColor: '#feca57',
             headerLeft: null, // Prevent going back during draft
+          }}
+        />
+        <Stack.Screen 
+          name="BoxScore" 
+          component={BoxScoreScreen} 
+          options={{ 
+            title: 'Post Game Stats',
+            headerStyle: { backgroundColor: '#1e1e1e' },
+            headerTintColor: '#fff',
+            headerLeft: null, 
           }}
         />
       </Stack.Navigator>

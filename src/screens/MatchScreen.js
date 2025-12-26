@@ -5,7 +5,7 @@ import { TEAMS } from '../data/teams';
 import { league } from '../engine/LeagueEngine';
 
 export default function MatchScreen({ route, navigation }) {
-  const { homeId, awayId, isPlayoff } = route.params;
+  const { homeId, awayId, isPlayoff, userTeamId } = route.params;
   const homeTeam = TEAMS.find(t => t.id === homeId);
   const awayTeam = TEAMS.find(t => t.id === awayId);
 
@@ -122,10 +122,10 @@ export default function MatchScreen({ route, navigation }) {
     // Get stats from engine
     const playerStats = engine.getMatchStats();
     
-    navigation.navigate('Season', {
-      userTeamId: homeId,
-      result: result,
-      playerStats: playerStats
+    navigation.navigate('BoxScore', {
+      userTeamId,
+      result,
+      playerStats
     });
   };
 
