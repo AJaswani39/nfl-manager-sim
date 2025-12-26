@@ -78,13 +78,21 @@ export default function SeasonScreen({ route, navigation }) {
       return "Offseason";
   };
 
+  const userStats = standings.find(s => s.id === userTeamId);
+  // Opponent ID
+  const oppId = nextMatch ? (nextMatch.home.id === userTeamId ? nextMatch.away.id : nextMatch.home.id) : null;
+  const oppStats = oppId ? standings.find(s => s.id === oppId) : null;
+  
+  const isSpoilerGame = userStats?.eliminated && oppStats && !oppStats.eliminated && league.phase === 'regular';
+  const knockedOutOpponent = route.params?.knockedOutOpponent;
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={[styles.header, { backgroundColor: userTeam.colors.primary }]}>
         <Text style={styles.weekLabel}>{getWeekLabel()}</Text>
         <Text style={styles.headerTeam}>{userTeam.city} {userTeam.name}</Text>
         <Text style={styles.recordLabel}>
-          Season Record: {standings.find(s => s.id === userTeamId)?.w} - {standings.find(s => s.id === userTeamId)?.l}
+          Season Record: {userStats?.w} - {userStats?.l}
         </Text>
       </View>
 
@@ -93,7 +101,23 @@ export default function SeasonScreen({ route, navigation }) {
         {/* ACTION AREA */}
         {league.phase !== 'offseason' ? (
           <View style={styles.section}>
+            {knockedOutOpponent && (
+                <View style={{backgroundColor:'#feca57', padding:10, borderRadius:8, marginBottom:16, alignItems:'center', borderWidth:2, borderColor:'#fff'}}>
+                    <Text style={{color:'#000', fontWeight:'bold', fontSize:16, textAlign:'center'}}>
+                        SPOILER SUCCESS!
+                    </Text>
+                    <Text style={{color:'#333', textAlign:'center', marginTop:4}}>
+                        You knocked {knockedOutOpponent} out of the playoffs!
+                    </Text>
+                </View>
+            )}
+
             <Text style={styles.sectionTitle}>Next Matchup</Text>
+            {isSpoilerGame && (
+                <View style={{backgroundColor:'#d32f2f', padding:5, borderRadius:4, marginBottom:5, alignItems:'center'}}>
+                    <Text style={{color:'#fff', fontWeight:'bold'}}>SPOILER ALERT: KNOCK THEM OUT!</Text>
+                </View>
+            )}
             {nextMatch ? (
               <View style={styles.matchupCard}>
                 <View style={styles.teamSide}>
