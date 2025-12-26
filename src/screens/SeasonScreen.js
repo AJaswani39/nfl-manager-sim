@@ -21,10 +21,10 @@ export default function SeasonScreen({ route, navigation }) {
 
   useEffect(() => {
     if (route.params?.result) {
-      const { result, playerStats } = route.params;
-      league.applyGameResult(result, playerStats);
+      const { result, playerStats, injuries } = route.params;
+      league.applyGameResult(result, playerStats, injuries);
       
-      navigation.setParams({ result: null, playerStats: null });
+      navigation.setParams({ result: null, playerStats: null, injuries: null });
       
       setCurrentWeek(league.currentWeek);
       setStandings(league.getStandingsSorted());
@@ -165,7 +165,8 @@ export default function SeasonScreen({ route, navigation }) {
                   onPress={() => navigation.navigate('Match', { 
                       homeId: nextMatch.home.id, 
                       awayId: nextMatch.away.id,
-                      userTeamId: userTeamId
+                      userTeamId: userTeamId,
+                      injuries: league.playerState
                   })}
                 >
                   <Text style={styles.simButtonText}>PLAY GAME</Text>

@@ -19,10 +19,12 @@ export const DEFENSE_TYPES = {
 import { ROSTERS } from '../data/rosters';
 
 export class MatchEngine {
-  constructor(homeTeam, awayTeam, isPlayoff = false) {
+  constructor(homeTeam, awayTeam, isPlayoff = false, injuries = {}) {
     this.homeTeam = homeTeam;
     this.awayTeam = awayTeam;
     this.isPlayoff = isPlayoff;
+    this.injuries = JSON.parse(JSON.stringify(injuries)); 
+    this.newInjuries = {};
     this.receivedFirstHalf = null;
 
     this.state = {
@@ -45,6 +47,20 @@ export class MatchEngine {
     this.awayRoster = ROSTERS[this.awayTeam.id] || [];
     
     this.performCoinToss();
+  }
+
+  isInjured(pid) {
+      return this.injuries[pid] && this.injuries[pid].weeksOut > 0;
+  }
+
+  checkForInjury(player) {
+      if (!player) return;
+      if (Math.random() < 0.015) { // 1.5% Chance
+          const weeks = Math.floor(Math.random() * 5) + 1; 
+          this.injuries[player.id] = { weeksOut: weeks };
+          this.newInjuries[player.id] = weeks;
+          this.addToLog(`INJURY ALERT: ${player.name} is hurt on the play!`);
+      }
   }
 
   // Returns TRUE if an event interrupted the play
@@ -371,6 +387,10 @@ export class MatchEngine {
       const roster = team.id === this.homeTeam.id ? this.homeRoster : this.awayRoster;
       if (!roster || roster.length === 0) return { name: 'Player' };
       
+      const pool = roster.filter(p => !this.isInjured(p.id));
+      // If pool empty, forced to use injured players (desperation)
+      const validRoster = pool.length > 0 ? pool : roster;
+      
       let candidates = [];
       if (positionGroup === 'QB') candidates = roster.filter(p => p.position === 'QB');
       else if (positionGroup === 'RB') candidates = roster.filter(p => p.position === 'RB');
@@ -378,7 +398,7 @@ export class MatchEngine {
       else if (positionGroup === 'DL') candidates = roster.filter(p => p.position === 'DL' || p.position === 'LB'); // Front 7
       else if (positionGroup === 'DB') candidates = roster.filter(p => p.position === 'CB' || p.position === 'S'); // Secondary
       // Fallback
-      if (candidates.length === 0) candidates = roster; 
+      if (candidates.length === 0) candidates = validRoster; 
       
       return candidates[Math.floor(Math.random() * candidates.length)];
   }
@@ -694,6 +714,13 @@ export class MatchEngine {
       }
     }
     
+    // Check for injuries
+    const participants = [qb, dl, lb, db];
+    if (offChoice.includes("RUN")) participants.push(rb);
+    if (offChoice.includes("PASS")) participants.push(wr);
+    
+    [...new Set(participants)].forEach(p => this.checkForInjury(p));
+
     this.tickClock();
   }
 
@@ -790,6 +817,9 @@ export class MatchEngine {
   }
 
   getMatchStats() {
-      return this.playerStats;
+      return {
+          stats: this.playerStats,
+          injuries: this.newInjuries
+      };
   }
 }

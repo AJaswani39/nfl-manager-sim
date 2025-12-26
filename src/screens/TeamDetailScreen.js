@@ -23,6 +23,9 @@ export default function TeamDetailScreen({ route, navigation }) {
 
   const renderPlayer = ({ item }) => {
     const stats = league.playerStats[item.id];
+    const injury = league.playerState[item.id];
+    const isInjured = injury && injury.weeksOut > 0;
+    
     let statText = "";
     if (item.position === 'QB') statText = `${stats?.passingYards||0} yds, ${stats?.passingTDs||0} TD`;
     else if (item.position === 'RB') statText = `${stats?.rushingYards||0} yds, ${stats?.rushingTDs||0} TD`;
@@ -35,7 +38,11 @@ export default function TeamDetailScreen({ route, navigation }) {
       </View>
       <View style={styles.playerInfo}>
         <Text style={styles.playerName}>{item.name}</Text>
-        <Text style={styles.playerMeta}>{statText || `Age: ${item.age}`}</Text>
+        <Text style={styles.playerMeta}>
+            {isInjured 
+                ? <Text style={{color: '#d32f2f', fontWeight: 'bold'}}>OUT ({injury.weeksOut} wks)</Text> 
+                : (statText || `Age: ${item.age}`)}
+        </Text>
       </View>
       <View style={styles.ratingCircle}>
         <Text style={[

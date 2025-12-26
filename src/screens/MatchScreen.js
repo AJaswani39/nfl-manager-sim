@@ -5,12 +5,12 @@ import { TEAMS } from '../data/teams';
 import { league } from '../engine/LeagueEngine';
 
 export default function MatchScreen({ route, navigation }) {
-  const { homeId, awayId, isPlayoff, userTeamId } = route.params;
+  const { homeId, awayId, isPlayoff, userTeamId, injuries } = route.params;
   const homeTeam = TEAMS.find(t => t.id === homeId);
   const awayTeam = TEAMS.find(t => t.id === awayId);
 
   // We keep the engine instance in a ref so it persists across renders without re-initializing
-  const engineRef = useRef(new MatchEngine(homeTeam, awayTeam, isPlayoff));
+  const engineRef = useRef(new MatchEngine(homeTeam, awayTeam, isPlayoff, injuries));
   const engine = engineRef.current; // Shorthand
 
   // We need React State to force re-renders when the engine state changes
@@ -120,12 +120,13 @@ export default function MatchScreen({ route, navigation }) {
     };
     
     // Get stats from engine
-    const playerStats = engine.getMatchStats();
+    const { stats, injuries: newInjuries } = engine.getMatchStats();
     
     navigation.navigate('BoxScore', {
       userTeamId,
       result,
-      playerStats
+      playerStats: stats,
+      injuries: newInjuries
     });
   };
 

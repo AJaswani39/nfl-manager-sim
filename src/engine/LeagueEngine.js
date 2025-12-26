@@ -17,6 +17,7 @@ export class LeagueEngine {
     this.weeks = []; // Array of arrays of matches
     this.standings = {}; 
     this.playerStats = {}; // { playerId: { passingYards: 0, touchdowns: 0, ... } }
+    this.playerState = {}; // { playerId: { weeksOut: 0 } }
     this.currentWeek = 1;
     this.phase = 'preseason'; // 'preseason', 'regular', 'playoffs', 'offseason'
     this.initializeStandings();
@@ -185,7 +186,7 @@ export class LeagueEngine {
      };
   }
 
-  applyGameResult(result, gameStats) {
+  applyGameResult(result, gameStats, newInjuries) {
       if (!result) return;
       // Find the match in current week or recent weeks
       // We look for the exact match ID or team combo in currentWeek-1 (since currWeek is 1-based)
@@ -224,13 +225,31 @@ export class LeagueEngine {
                   add('rushingYards'); add('rushingTDs'); add('rushingAtt');
                   add('receivingYards'); add('receivingTDs'); add('receptions');
                   add('tackles'); add('sacks'); add('interceptions');
+                  add('defTDs'); add('fumblesRecovered');
               }
+          });
+      }
+
+      // Record Injuries
+      if (newInjuries) {
+          Object.keys(newInjuries).forEach(pid => {
+              this.playerState[pid] = { weeksOut: newInjuries[pid] };
           });
       }
   }
 
   // Update simulateWeek to handle progression
   simulateWeek(weekIndex) {
+    // Process Healing if advancing current week
+    if (weekIndex === this.currentWeek - 1) {
+        Object.keys(this.playerState).forEach(pid => {
+            if (this.playerState[pid].weeksOut > 0) {
+                this.playerState[pid].weeksOut--;
+                if (this.playerState[pid].weeksOut <= 0) delete this.playerState[pid];
+            }
+        });
+    }
+
     if (weekIndex < 0 || weekIndex >= this.weeks.length) return;
     
     const weekMatches = this.weeks[weekIndex];
