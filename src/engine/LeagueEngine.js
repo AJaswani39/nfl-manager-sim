@@ -20,6 +20,7 @@ export class LeagueEngine {
     this.playerState = {}; // { playerId: { weeksOut: 0 } }
     this.news = []; // Array of { message, type, week }
     this.rosters = JSON.parse(JSON.stringify(ROSTERS)); // Mutable Rosters
+    this.freeAgents = []; // Players not on any team
     this.currentWeek = 1;
     this.phase = 'preseason'; // 'preseason', 'regular', 'playoffs', 'offseason'
     this.initializeStandings();
@@ -676,6 +677,155 @@ export class LeagueEngine {
       return pick;
   }
 
+  // FREE AGENCY LOGIC
+  generateFreeAgents() {
+    // Generate some random free agents each offseason
+    const positions = ['QB', 'RB', 'WR', 'TE', 'OL', 'DL', 'LB', 'CB', 'S'];
+    const firstNames = ['Mike', 'Chris', 'David', 'Tyler', 'Brandon', 'Jason', 'Ryan', 'Kevin', 'Matt', 'Alex'];
+    const lastNames = ['Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis', 'Rodriguez', 'Martinez', 'Anderson'];
+    
+    const newFAs = [];
+    for (let i = 0; i < 15; i++) {
+      const pos = positions[Math.floor(Math.random() * positions.length)];
+      const rating = 60 + Math.floor(Math.random() * 25); // 60-85 range (veterans)
+      const age = 26 + Math.floor(Math.random() * 8); // 26-33 range
+      
+      newFAs.push({
+        id: `fa_${Date.now()}_${i}`,
+        name: `${firstNames[Math.floor(Math.random() * firstNames.length)]} ${lastNames[Math.floor(Math.random() * lastNames.length)]}`,
+        position: pos,
+        overall: rating,
+        age: age,
+        stats: {},
+      });
+    }
+    
+    // Keep existing FAs that weren't signed (up to 20 total)
+    this.freeAgents = [...this.freeAgents, ...newFAs].slice(0, 30);
+    this.freeAgents.sort((a, b) => b.overall - a.overall);
+  }
+
+  getFreeAgents(positionFilter = null) {
+    if (!positionFilter) return this.freeAgents;
+    return this.freeAgents.filter(p => p.position === positionFilter);
+  }
+
+  signFreeAgent(teamId, playerId) {
+    const playerIndex = this.freeAgents.findIndex(p => p.id === playerId);
+    if (playerIndex === -1) return null;
+    
+    const player = this.freeAgents.splice(playerIndex, 1)[0];
+    
+    if (!this.rosters[teamId]) this.rosters[teamId] = [];
+    this.rosters[teamId].push(player);
+    
+    // Initialize stats
+    if (!this.playerStats[player.id]) {
+      this.playerStats[player.id] = {
+        passingYards: 0, passingTDs: 0, passingAtt: 0, passingComp: 0,
+        rushingYards: 0, rushingTDs: 0, rushingAtt: 0,
+        receivingYards: 0, receivingTDs: 0, receptions: 0,
+        tackles: 0, sacks: 0, interceptions: 0
+      };
+    }
+    
+    this.addNews(`${player.name} (${player.position}) signed with ${teamId}.`, 'transaction');
+    return player;
+  }
+
+  cutPlayer(teamId, playerId) {
+    const roster = this.rosters[teamId];
+    if (!roster) return null;
+    
+    const playerIndex = roster.findIndex(p => p.id === playerId);
+    if (playerIndex === -1) return null;
+    
+    const player = roster.splice(playerIndex, 1)[0];
+    this.freeAgents.push(player);
+    this.freeAgents.sort((a, b) => b.overall - a.overall);
+    
+    this.addNews(`${player.name} (${player.position}) was released by ${teamId}.`, 'transaction');
+    return player;
+  }
+
+  // TRADE SYSTEM
+  calculatePlayerValue(player) {
+    // Simple value formula based on overall, age, and position
+    let baseValue = player.overall * 10;
+    
+    // Age adjustment
+    if (player.age < 25) baseValue += 150; // Young premium
+    else if (player.age > 30) baseValue -= 100; // Veteran discount
+    else if (player.age > 33) baseValue -= 200;
+    
+    // Position premiums
+    if (player.position === 'QB') baseValue += 200;
+    else if (['WR', 'CB', 'DL'].includes(player.position)) baseValue += 50;
+    
+    return Math.max(100, baseValue);
+  }
+
+  evaluateTrade(offeringTeamId, receivingTeamId, playersOffered, playersRequested) {
+    // Calculate total value of players offered vs requested
+    let offeredValue = 0;
+    let requestedValue = 0;
+
+    playersOffered.forEach(playerId => {
+      const player = this.rosters[offeringTeamId]?.find(p => p.id === playerId);
+      if (player) offeredValue += this.calculatePlayerValue(player);
+    });
+
+    playersRequested.forEach(playerId => {
+      const player = this.rosters[receivingTeamId]?.find(p => p.id === playerId);
+      if (player) requestedValue += this.calculatePlayerValue(player);
+    });
+
+    // AI will accept if value is within 15% of fair
+    const fairnessRatio = offeredValue / (requestedValue || 1);
+    const willAccept = fairnessRatio >= 0.85;
+
+    return {
+      offeredValue,
+      requestedValue,
+      fairnessRatio,
+      willAccept,
+      message: willAccept 
+        ? 'Trade Accepted!' 
+        : fairnessRatio < 0.5 
+          ? 'Insulting offer. Add more value.' 
+          : 'Close, but we need a bit more.'
+    };
+  }
+
+  executeTrade(team1Id, team2Id, players1, players2) {
+    // Move players1 from team1 to team2
+    players1.forEach(playerId => {
+      const roster = this.rosters[team1Id];
+      const idx = roster?.findIndex(p => p.id === playerId);
+      if (idx !== -1) {
+        const player = roster.splice(idx, 1)[0];
+        if (!this.rosters[team2Id]) this.rosters[team2Id] = [];
+        this.rosters[team2Id].push(player);
+      }
+    });
+
+    // Move players2 from team2 to team1
+    players2.forEach(playerId => {
+      const roster = this.rosters[team2Id];
+      const idx = roster?.findIndex(p => p.id === playerId);
+      if (idx !== -1) {
+        const player = roster.splice(idx, 1)[0];
+        if (!this.rosters[team1Id]) this.rosters[team1Id] = [];
+        this.rosters[team1Id].push(player);
+      }
+    });
+
+    // Generate news
+    const team1 = TEAMS.find(t => t.id === team1Id);
+    const team2 = TEAMS.find(t => t.id === team2Id);
+    this.addNews(`TRADE: ${team1?.abbreviation || team1Id} and ${team2?.abbreviation || team2Id} complete multi-player deal.`, 'transaction');
+  }
+
   startNewSeason() {
       // 1. Reset Week
       this.currentWeek = 1;
@@ -742,6 +892,65 @@ export class LeagueEngine {
       });
       
       this.generateTransactions();
+      this.generateFreeAgents();
+  }
+
+  // SAVE/LOAD GAME
+  getSaveData() {
+    return {
+      weeks: this.weeks,
+      standings: this.standings,
+      playerStats: this.playerStats,
+      playerState: this.playerState,
+      news: this.news,
+      rosters: this.rosters,
+      currentWeek: this.currentWeek,
+      phase: this.phase,
+      userTeamId: this.userTeamId,
+      season: this.season || 1,
+      draftClass: this.draftClass,
+      draftOrder: this.draftOrder,
+      currentPickIndex: this.currentPickIndex,
+      freeAgents: this.freeAgents,
+    };
+  }
+
+  loadSaveData(data) {
+    if (!data) return false;
+    this.weeks = data.weeks || [];
+    this.standings = data.standings || {};
+    this.playerStats = data.playerStats || {};
+    this.playerState = data.playerState || {};
+    this.news = data.news || [];
+    this.rosters = data.rosters || JSON.parse(JSON.stringify(ROSTERS));
+    this.currentWeek = data.currentWeek || 1;
+    this.phase = data.phase || 'preseason';
+    this.userTeamId = data.userTeamId;
+    this.season = data.season || 1;
+    this.draftClass = data.draftClass;
+    this.draftOrder = data.draftOrder;
+    this.currentPickIndex = data.currentPickIndex;
+    this.freeAgents = data.freeAgents || [];
+    return true;
+  }
+
+  resetGame() {
+    this.weeks = [];
+    this.standings = {};
+    this.playerStats = {};
+    this.playerState = {};
+    this.news = [];
+    this.rosters = JSON.parse(JSON.stringify(ROSTERS));
+    this.currentWeek = 1;
+    this.phase = 'preseason';
+    this.userTeamId = null;
+    this.season = 1;
+    this.draftClass = null;
+    this.draftOrder = null;
+    this.currentPickIndex = 0;
+    this.freeAgents = [];
+    this.initializeStandings();
+    this.initializePlayerStats();
   }
 }
 

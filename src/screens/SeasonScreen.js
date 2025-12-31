@@ -2,23 +2,28 @@ import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, SafeAreaView, TouchableOpacity, ScrollView, FlatList } from 'react-native';
 import { league } from '../engine/LeagueEngine';
 import { TEAMS } from '../data/teams';
+import { StorageService } from '../services/StorageService';
 
 export default function SeasonScreen({ route, navigation }) {
-  const { userTeamId } = route.params;
+  const { teamId } = route.params;
+  const userTeamId = teamId || league.userTeamId;
   const userTeam = TEAMS.find(t => t.id === userTeamId);
   const [currentWeek, setCurrentWeek] = useState(league.currentWeek);
   const [standings, setStandings] = useState(league.getStandingsSorted());
   const [recentResult, setRecentResult] = useState(null);
+
+  // Set userTeamId on league if not already set
+  useEffect(() => {
+    if (userTeamId && !league.userTeamId) {
+      league.userTeamId = userTeamId;
+    }
+  }, [userTeamId]);
 
   // Refresh data when screen receives focus (e.g. returning from Match or Draft)
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
       setCurrentWeek(league.currentWeek);
       setStandings(league.getStandingsSorted());
-      
-      // DEBUG
-      if (league.rosters['BUF']) console.log("[DEBUG] BUF Roster[0]:", league.rosters['BUF'][0].name);
-      if (league.rosters['BAL']) console.log("[DEBUG] BAL Roster[0]:", league.rosters['BAL'][0].name);
     });
     return unsubscribe;
   }, [navigation]);
@@ -32,6 +37,9 @@ export default function SeasonScreen({ route, navigation }) {
       
       setCurrentWeek(league.currentWeek);
       setStandings(league.getStandingsSorted());
+      
+      // Auto-save after each game
+      StorageService.saveGame(league.getSaveData());
       
       // Show result feedback
       const oppId = result.homeId === userTeamId ? result.awayId : result.homeId;
@@ -162,6 +170,27 @@ export default function SeasonScreen({ route, navigation }) {
                 <Text style={{color:'#fdd835', fontSize: 20}}>→</Text>
             </TouchableOpacity>
 
+            <TouchableOpacity 
+              style={{flexDirection:'row', alignItems:'center', justifyContent:'space-between', padding:10, backgroundColor:'#1e1e1e', borderRadius:8, marginBottom:16, borderLeftWidth: 4, borderColor: '#4caf50'}}
+              onPress={() => navigation.navigate('FreeAgency', { userTeamId })}
+            >
+                <View>
+                    <Text style={{color:'#fff', fontWeight:'bold', fontSize: 16}}>✍️ FREE AGENCY</Text>
+                    <Text style={{color:'#888', fontSize:12}}>Sign or release players</Text>
+                </View>
+                <Text style={{color:'#4caf50', fontSize: 20}}>→</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={{flexDirection:'row', alignItems:'center', justifyContent:'space-between', padding:10, backgroundColor:'#1e1e1e', borderRadius:8, marginBottom:16, borderLeftWidth: 4, borderColor: '#f44336'}}
+              onPress={() => navigation.navigate('Trade', { userTeamId })}
+            >
+                <View>
+                    <Text style={{color:'#fff', fontWeight:'bold', fontSize: 16}}>🔄 TRADE CENTER</Text>
+                    <Text style={{color:'#888', fontSize:12}}>Make trades with other teams</Text>
+                </View>
+                <Text style={{color:'#f44336', fontSize: 20}}>→</Text>
+            </TouchableOpacity>
 
             <Text style={styles.sectionTitle}>Next Matchup</Text>
             {isSpoilerGame && (

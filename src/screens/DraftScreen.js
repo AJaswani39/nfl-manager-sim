@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, SafeAreaView, FlatList, TouchableOpacity, Alert } from 'react-native';
 import { league } from '../engine/LeagueEngine';
 import { TEAMS } from '../data/teams';
+import { StorageService } from '../services/StorageService';
 
 export default function DraftScreen({ route, navigation }) {
     const { userTeamId } = route.params;
@@ -69,9 +70,10 @@ export default function DraftScreen({ route, navigation }) {
         );
     };
 
-    const handleFinishOffseason = () => {
+    const handleFinishOffseason = async () => {
         league.startNewSeason();
-        navigation.navigate('Season', { userTeamId }); // Will reset to Week 1
+        await StorageService.saveGame(league.getSaveData());
+        navigation.navigate('Season', { teamId: userTeamId });
     };
 
     const renderProspect = ({ item, index }) => (

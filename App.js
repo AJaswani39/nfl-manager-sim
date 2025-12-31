@@ -11,6 +11,8 @@ import DraftScreen from './src/screens/DraftScreen';
 import BoxScoreScreen from './src/screens/BoxScoreScreen';
 import NewsScreen from './src/screens/NewsScreen';
 import LeaderboardScreen from './src/screens/LeaderboardScreen';
+import FreeAgencyScreen from './src/screens/FreeAgencyScreen';
+import TradeScreen from './src/screens/TradeScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -68,6 +70,16 @@ export default function App() {
         <Stack.Screen 
           name="Leaderboard" 
           component={LeaderboardScreen} 
+          options={{ headerShown: false }} 
+        />
+        <Stack.Screen 
+          name="FreeAgency" 
+          component={FreeAgencyScreen} 
+          options={{ headerShown: false }} 
+        />
+        <Stack.Screen 
+          name="Trade" 
+          component={TradeScreen} 
           options={{ headerShown: false }} 
         />
         <Stack.Screen 
