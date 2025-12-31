@@ -10,6 +10,7 @@ import MatchScreen from './src/screens/MatchScreen';
 import DraftScreen from './src/screens/DraftScreen';
 import BoxScoreScreen from './src/screens/BoxScoreScreen';
 import NewsScreen from './src/screens/NewsScreen';
+import LeaderboardScreen from './src/screens/LeaderboardScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -62,6 +63,11 @@ export default function App() {
         <Stack.Screen 
           name="News" 
           component={NewsScreen} 
+          options={{ headerShown: false }} 
+        />
+        <Stack.Screen 
+          name="Leaderboard" 
+          component={LeaderboardScreen} 
           options={{ headerShown: false }} 
         />
         <Stack.Screen 

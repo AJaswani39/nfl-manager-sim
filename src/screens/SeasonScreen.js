@@ -151,6 +151,18 @@ export default function SeasonScreen({ route, navigation }) {
                 <Text style={{color:'#007AFF', fontSize: 20}}>→</Text>
             </TouchableOpacity>
 
+            <TouchableOpacity 
+              style={{flexDirection:'row', alignItems:'center', justifyContent:'space-between', padding:10, backgroundColor:'#1e1e1e', borderRadius:8, marginBottom:16, borderLeftWidth: 4, borderColor: '#fdd835'}}
+              onPress={() => navigation.navigate('Leaderboard')}
+            >
+                <View>
+                    <Text style={{color:'#fff', fontWeight:'bold', fontSize: 16}}>🏆 STAT LEADERS</Text>
+                    <Text style={{color:'#888', fontSize:12}}>League-wide leaderboards</Text>
+                </View>
+                <Text style={{color:'#fdd835', fontSize: 20}}>→</Text>
+            </TouchableOpacity>
+
+
             <Text style={styles.sectionTitle}>Next Matchup</Text>
             {isSpoilerGame && (
                 <View style={{backgroundColor:'#d32f2f', padding:5, borderRadius:4, marginBottom:5, alignItems:'center'}}>

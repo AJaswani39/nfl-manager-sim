@@ -449,6 +449,47 @@ export class LeagueEngine {
       })
       .sort((a, b) => b.w - a.w || (b.pf - b.pa) - (a.pf - a.pa));
   }
+
+  // LEADERBOARD LOGIC
+  getLeaderboard(statKey, limit = 10) {
+    // Find player info from rosters
+    const findPlayer = (playerId) => {
+      for (const teamId of Object.keys(this.rosters)) {
+        const player = this.rosters[teamId].find(p => p.id === playerId);
+        if (player) return { ...player, teamId };
+      }
+      return null;
+    };
+
+    return Object.keys(this.playerStats)
+      .map(playerId => {
+        const stats = this.playerStats[playerId];
+        const player = findPlayer(playerId);
+        if (!player) return null;
+        return {
+          ...player,
+          stats,
+          value: stats[statKey] || 0
+        };
+      })
+      .filter(p => p && p.value > 0)
+      .sort((a, b) => b.value - a.value)
+      .slice(0, limit);
+  }
+
+  getLeaderboardCategories() {
+    return [
+      { key: 'passingYards', label: 'Passing Yards', icon: '🏈' },
+      { key: 'passingTDs', label: 'Passing TDs', icon: '🎯' },
+      { key: 'rushingYards', label: 'Rushing Yards', icon: '🏃' },
+      { key: 'rushingTDs', label: 'Rushing TDs', icon: '💨' },
+      { key: 'receivingYards', label: 'Receiving Yards', icon: '🙌' },
+      { key: 'receptions', label: 'Receptions', icon: '🤲' },
+      { key: 'sacks', label: 'Sacks', icon: '💥' },
+      { key: 'tackles', label: 'Tackles', icon: '🛡️' },
+      { key: 'interceptions', label: 'Interceptions', icon: '🔒' },
+    ];
+  }
   
   // PLAYOFF LOGIC
   
