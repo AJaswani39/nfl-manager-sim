@@ -13,6 +13,8 @@ import NewsScreen from './src/screens/NewsScreen';
 import LeaderboardScreen from './src/screens/LeaderboardScreen';
 import FreeAgencyScreen from './src/screens/FreeAgencyScreen';
 import TradeScreen from './src/screens/TradeScreen';
+import AwardsScreen from './src/screens/AwardsScreen';
+import SeasonRecapScreen from './src/screens/SeasonRecapScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -80,6 +82,16 @@ export default function App() {
         <Stack.Screen 
           name="Trade" 
           component={TradeScreen} 
+          options={{ headerShown: false }} 
+        />
+        <Stack.Screen 
+          name="Awards" 
+          component={AwardsScreen} 
+          options={{ headerShown: false }} 
+        />
+        <Stack.Screen 
+          name="SeasonRecap" 
+          component={SeasonRecapScreen} 
           options={{ headerShown: false }} 
         />
         <Stack.Screen 

@@ -491,6 +491,85 @@ export class LeagueEngine {
       { key: 'interceptions', label: 'Interceptions', icon: '🔒' },
     ];
   }
+
+  // AWARDS SYSTEM
+  calculatePlayerScore(stats, position) {
+    // Calculate a weighted score based on position
+    let score = 0;
+    
+    if (['QB'].includes(position)) {
+      score = (stats.passingYards || 0) * 0.04 + 
+              (stats.passingTDs || 0) * 4 - 
+              (stats.interceptions || 0) * 2;
+    } else if (['RB'].includes(position)) {
+      score = (stats.rushingYards || 0) * 0.1 + 
+              (stats.rushingTDs || 0) * 6 +
+              (stats.receivingYards || 0) * 0.05;
+    } else if (['WR', 'TE'].includes(position)) {
+      score = (stats.receivingYards || 0) * 0.1 + 
+              (stats.receivingTDs || 0) * 6 +
+              (stats.receptions || 0) * 0.5;
+    } else if (['DL', 'LB'].includes(position)) {
+      score = (stats.sacks || 0) * 6 + 
+              (stats.tackles || 0) * 1 +
+              (stats.interceptions || 0) * 8;
+    } else if (['CB', 'S', 'DB'].includes(position)) {
+      score = (stats.interceptions || 0) * 10 + 
+              (stats.tackles || 0) * 0.5;
+    }
+    
+    return score;
+  }
+
+  calculateAwards() {
+    const findPlayer = (playerId) => {
+      for (const teamId of Object.keys(this.rosters)) {
+        const player = this.rosters[teamId].find(p => p.id === playerId);
+        if (player) return { ...player, teamId };
+      }
+      return null;
+    };
+
+    // Calculate scores for all players
+    const playerScores = Object.keys(this.playerStats)
+      .map(playerId => {
+        const stats = this.playerStats[playerId];
+        const player = findPlayer(playerId);
+        if (!player) return null;
+        
+        return {
+          ...player,
+          stats,
+          score: this.calculatePlayerScore(stats, player.position)
+        };
+      })
+      .filter(p => p && p.score > 0)
+      .sort((a, b) => b.score - a.score);
+
+    // MVP - Highest overall score
+    const mvp = playerScores[0] || null;
+
+    // OPOY - Highest offensive player (QB, RB, WR, TE)
+    const offensivePositions = ['QB', 'RB', 'WR', 'TE'];
+    const opoy = playerScores.find(p => offensivePositions.includes(p.position)) || null;
+
+    // DPOY - Highest defensive player
+    const defensivePositions = ['DL', 'LB', 'CB', 'S', 'DB'];
+    const dpoy = playerScores.find(p => defensivePositions.includes(p.position)) || null;
+
+    // OROY - Highest rookie (id contains 'rookie_')
+    const oroy = playerScores.find(p => p.id.startsWith('rookie_')) || null;
+
+    this.awards = { mvp, opoy, dpoy, oroy };
+    return this.awards;
+  }
+
+  getAwards() {
+    if (!this.awards) {
+      this.calculateAwards();
+    }
+    return this.awards;
+  }
   
   // PLAYOFF LOGIC
   

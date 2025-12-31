@@ -88,6 +88,31 @@ export default function SeasonScreen({ route, navigation }) {
     }
   };
 
+  const handleQuickSim = async () => {
+    const match = getNextMatch();
+    if (!match || match.played) return;
+
+    // Use league's simulation logic for this specific game
+    league.simulateWeek(league.currentWeek - 1);
+    
+    setCurrentWeek(league.currentWeek);
+    setStandings(league.getStandingsSorted());
+    
+    // Auto-save
+    StorageService.saveGame(league.getSaveData());
+    
+    // Show result feedback
+    if (match.result) {
+      const weWon = (match.home.id === userTeamId && match.result.homeScore > match.result.awayScore) ||
+                    (match.away.id === userTeamId && match.result.awayScore > match.result.homeScore);
+      setRecentResult({
+        won: weWon,
+        score: `${match.result.awayScore} - ${match.result.homeScore}`,
+        opponent: match.home.id === userTeamId ? match.away.abbreviation : match.home.abbreviation
+      });
+    }
+  };
+
   const renderStanding = ({ item, index }) => (
     <View style={[styles.standingRow, item.id === userTeamId && styles.userRow]}>
       <Text style={styles.rank}>{index + 1}</Text>
@@ -171,6 +196,17 @@ export default function SeasonScreen({ route, navigation }) {
             </TouchableOpacity>
 
             <TouchableOpacity 
+              style={{flexDirection:'row', alignItems:'center', justifyContent:'space-between', padding:10, backgroundColor:'#1e1e1e', borderRadius:8, marginBottom:16, borderLeftWidth: 4, borderColor: '#9c27b0'}}
+              onPress={() => navigation.navigate('Awards')}
+            >
+                <View>
+                    <Text style={{color:'#fff', fontWeight:'bold', fontSize: 16}}>🎖️ SEASON AWARDS</Text>
+                    <Text style={{color:'#888', fontSize:12}}>MVP, OPOY, DPOY & more</Text>
+                </View>
+                <Text style={{color:'#9c27b0', fontSize: 20}}>→</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
               style={{flexDirection:'row', alignItems:'center', justifyContent:'space-between', padding:10, backgroundColor:'#1e1e1e', borderRadius:8, marginBottom:16, borderLeftWidth: 4, borderColor: '#4caf50'}}
               onPress={() => navigation.navigate('FreeAgency', { userTeamId })}
             >
@@ -216,17 +252,25 @@ export default function SeasonScreen({ route, navigation }) {
 
             {/* Play Button */}
             {nextMatch && !nextMatch.played ? (
-                 <TouchableOpacity 
-                  style={styles.simButton} 
-                  onPress={() => navigation.navigate('Match', { 
-                      homeId: nextMatch.home.id, 
-                      awayId: nextMatch.away.id,
-                      userTeamId: userTeamId,
-                      injuries: league.playerState
-                  })}
-                >
-                  <Text style={styles.simButtonText}>PLAY GAME</Text>
-                </TouchableOpacity>
+                <View style={{flexDirection: 'row', gap: 10}}>
+                    <TouchableOpacity 
+                      style={[styles.simButton, {flex: 1}]} 
+                      onPress={() => navigation.navigate('Match', { 
+                          homeId: nextMatch.home.id, 
+                          awayId: nextMatch.away.id,
+                          userTeamId: userTeamId,
+                          injuries: league.playerState
+                      })}
+                    >
+                      <Text style={styles.simButtonText}>▶ PLAY</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      style={[styles.simButton, {flex: 1, backgroundColor: '#555'}]} 
+                      onPress={handleQuickSim}
+                    >
+                      <Text style={styles.simButtonText}>⏩ QUICK SIM</Text>
+                    </TouchableOpacity>
+                </View>
             ) : nextMatch && nextMatch.played ? (
                 <View style={[styles.simButton, {backgroundColor:'#555'}]}>
                     <Text style={styles.simButtonText}>GAME PLAYED</Text>
@@ -256,8 +300,8 @@ export default function SeasonScreen({ route, navigation }) {
         ) : (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Season Over</Text>
-            <TouchableOpacity style={styles.simButton} onPress={() => navigation.navigate('Draft', { userTeamId })}>
-                <Text style={styles.simBtnText}>START OFFSEASON</Text>
+            <TouchableOpacity style={styles.simButton} onPress={() => navigation.navigate('SeasonRecap', { userTeamId })}>
+                <Text style={styles.simBtnText}>VIEW SEASON RECAP →</Text>
             </TouchableOpacity>
           </View>
         )}
