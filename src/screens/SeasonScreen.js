@@ -250,6 +250,28 @@ export default function SeasonScreen({ route, navigation }) {
                 <Text style={{color:'#ff9800', fontSize: 20}}>→</Text>
             </TouchableOpacity>
 
+            <TouchableOpacity 
+              style={{flexDirection:'row', alignItems:'center', justifyContent:'space-between', padding:10, backgroundColor:'#1e1e1e', borderRadius:8, marginBottom:16, borderLeftWidth: 4, borderColor: '#e91e63'}}
+              onPress={() => navigation.navigate('Franchise', { userTeamId })}
+            >
+                <View>
+                    <Text style={{color:'#fff', fontWeight:'bold', fontSize: 16}}>📜 FRANCHISE</Text>
+                    <Text style={{color:'#888', fontSize:12}}>Trophy case & history</Text>
+                </View>
+                <Text style={{color:'#e91e63', fontSize: 20}}>→</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={{flexDirection:'row', alignItems:'center', justifyContent:'space-between', padding:10, backgroundColor:'#1e1e1e', borderRadius:8, marginBottom:16, borderLeftWidth: 4, borderColor: '#8bc34a'}}
+              onPress={() => navigation.navigate('SalaryCap', { userTeamId })}
+            >
+                <View>
+                    <Text style={{color:'#fff', fontWeight:'bold', fontSize: 16}}>💰 SALARY CAP</Text>
+                    <Text style={{color:'#888', fontSize:12}}>Manage team finances</Text>
+                </View>
+                <Text style={{color:'#8bc34a', fontSize: 20}}>→</Text>
+            </TouchableOpacity>
+
             <Text style={styles.sectionTitle}>Next Matchup</Text>
             {isSpoilerGame && (
                 <View style={{backgroundColor:'#d32f2f', padding:5, borderRadius:4, marginBottom:5, alignItems:'center'}}>

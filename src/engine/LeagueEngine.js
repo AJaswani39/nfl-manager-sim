@@ -22,11 +22,16 @@ export class LeagueEngine {
     this.rosters = JSON.parse(JSON.stringify(ROSTERS)); // Mutable Rosters
     this.freeAgents = []; // Players not on any team
     this.coaches = {}; // { teamId: coachType }
+    this.salaries = {}; // { playerId: { amount, years } }
+    this.teamCaps = {}; // { teamId: { spent, cap } }
+    this.franchiseHistory = []; // Array of { season, champion, mvp, ... }
     this.currentWeek = 1;
+    this.season = 1;
     this.phase = 'preseason'; // 'preseason', 'regular', 'playoffs', 'offseason'
     this.initializeStandings();
     this.initializePlayerStats();
     this.initializeCoaches();
+    this.initializeSalaries();
   }
 
   initializeStandings() {
@@ -122,6 +127,91 @@ export class LeagueEngine {
   getCoachBonus(teamId, type) {
     const coach = this.getCoach(teamId);
     return coach.bonuses[type] || 0;
+  }
+
+  // SALARY CAP SYSTEM
+  initializeSalaries() {
+    const SALARY_CAP = 200; // $200M cap
+    
+    TEAMS.forEach(team => {
+      this.teamCaps[team.id] = { spent: 0, cap: SALARY_CAP };
+    });
+
+    // Assign initial salaries based on overall rating
+    Object.keys(ROSTERS).forEach(teamId => {
+      let spent = 0;
+      ROSTERS[teamId].forEach(player => {
+        const salary = this.calculateSalary(player.overall, player.position);
+        this.salaries[player.id] = { amount: salary, years: 3 };
+        spent += salary;
+      });
+      if (this.teamCaps[teamId]) {
+        this.teamCaps[teamId].spent = spent;
+      }
+    });
+  }
+
+  calculateSalary(overall, position) {
+    // Base salary from overall
+    let base = Math.floor((overall - 60) * 0.5); // 0-20M base
+    
+    // Position premium
+    if (position === 'QB') base = Math.floor(base * 1.8);
+    else if (['WR', 'CB', 'DL'].includes(position)) base = Math.floor(base * 1.2);
+    
+    return Math.max(1, Math.min(45, base)); // $1M min, $45M max
+  }
+
+  getTeamCap(teamId) {
+    return this.teamCaps[teamId] || { spent: 0, cap: 200 };
+  }
+
+  getPlayerSalary(playerId) {
+    return this.salaries[playerId] || { amount: 1, years: 1 };
+  }
+
+  getCapSpace(teamId) {
+    const cap = this.getTeamCap(teamId);
+    return cap.cap - cap.spent;
+  }
+
+  updateTeamSpending(teamId) {
+    const roster = this.rosters[teamId] || [];
+    let spent = 0;
+    roster.forEach(player => {
+      spent += this.getPlayerSalary(player.id).amount;
+    });
+    if (this.teamCaps[teamId]) {
+      this.teamCaps[teamId].spent = spent;
+    }
+  }
+
+  // FRANCHISE HISTORY
+  recordSeasonHistory() {
+    const standings = this.getStandingsSorted();
+    const champion = standings[0];
+    const awards = this.getAwards();
+    
+    const seasonRecord = {
+      season: this.season,
+      champion: champion ? { id: champion.id, name: champion.name, record: `${champion.w}-${champion.l}` } : null,
+      mvp: awards?.mvp ? { name: awards.mvp.name, teamId: awards.mvp.teamId, position: awards.mvp.position } : null,
+      opoy: awards?.opoy ? { name: awards.opoy.name, teamId: awards.opoy.teamId } : null,
+      dpoy: awards?.dpoy ? { name: awards.dpoy.name, teamId: awards.dpoy.teamId } : null,
+      userTeamId: this.userTeamId,
+      userRecord: this.standings[this.userTeamId] ? `${this.standings[this.userTeamId].w}-${this.standings[this.userTeamId].l}` : null,
+      userFinish: standings.findIndex(s => s.id === this.userTeamId) + 1
+    };
+    
+    this.franchiseHistory.push(seasonRecord);
+  }
+
+  getFranchiseHistory() {
+    return this.franchiseHistory || [];
+  }
+
+  getUserChampionships() {
+    return this.franchiseHistory.filter(h => h.champion?.id === this.userTeamId).length;
   }
 
   generateSchedule() {
@@ -984,6 +1074,11 @@ export class LeagueEngine {
   }
 
   startNewSeason() {
+      // 0. Record history before resetting
+      this.recordSeasonHistory();
+      this.season = (this.season || 1) + 1;
+      this.awards = null; // Reset awards for new season
+      
       // 1. Reset Week
       this.currentWeek = 1;
       this.phase = 'preseason';
@@ -1070,6 +1165,9 @@ export class LeagueEngine {
       currentPickIndex: this.currentPickIndex,
       freeAgents: this.freeAgents,
       coaches: this.coaches,
+      salaries: this.salaries,
+      teamCaps: this.teamCaps,
+      franchiseHistory: this.franchiseHistory,
     };
   }
 
@@ -1090,6 +1188,9 @@ export class LeagueEngine {
     this.currentPickIndex = data.currentPickIndex;
     this.freeAgents = data.freeAgents || [];
     this.coaches = data.coaches || {};
+    this.salaries = data.salaries || {};
+    this.teamCaps = data.teamCaps || {};
+    this.franchiseHistory = data.franchiseHistory || [];
     return true;
   }
 
@@ -1109,9 +1210,13 @@ export class LeagueEngine {
     this.currentPickIndex = 0;
     this.freeAgents = [];
     this.coaches = {};
+    this.salaries = {};
+    this.teamCaps = {};
+    this.franchiseHistory = [];
     this.initializeStandings();
     this.initializePlayerStats();
     this.initializeCoaches();
+    this.initializeSalaries();
   }
 }
 
