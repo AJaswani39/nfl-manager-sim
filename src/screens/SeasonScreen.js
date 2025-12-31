@@ -207,6 +207,17 @@ export default function SeasonScreen({ route, navigation }) {
             </TouchableOpacity>
 
             <TouchableOpacity 
+              style={{flexDirection:'row', alignItems:'center', justifyContent:'space-between', padding:10, backgroundColor:'#1e1e1e', borderRadius:8, marginBottom:16, borderLeftWidth: 4, borderColor: '#00bcd4'}}
+              onPress={() => navigation.navigate('Compare')}
+            >
+                <View>
+                    <Text style={{color:'#fff', fontWeight:'bold', fontSize: 16}}>⚖️ COMPARE PLAYERS</Text>
+                    <Text style={{color:'#888', fontSize:12}}>Side-by-side stats comparison</Text>
+                </View>
+                <Text style={{color:'#00bcd4', fontSize: 20}}>→</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
               style={{flexDirection:'row', alignItems:'center', justifyContent:'space-between', padding:10, backgroundColor:'#1e1e1e', borderRadius:8, marginBottom:16, borderLeftWidth: 4, borderColor: '#4caf50'}}
               onPress={() => navigation.navigate('FreeAgency', { userTeamId })}
             >
@@ -226,6 +237,17 @@ export default function SeasonScreen({ route, navigation }) {
                     <Text style={{color:'#888', fontSize:12}}>Make trades with other teams</Text>
                 </View>
                 <Text style={{color:'#f44336', fontSize: 20}}>→</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={{flexDirection:'row', alignItems:'center', justifyContent:'space-between', padding:10, backgroundColor:'#1e1e1e', borderRadius:8, marginBottom:16, borderLeftWidth: 4, borderColor: '#ff9800'}}
+              onPress={() => navigation.navigate('Coach', { userTeamId })}
+            >
+                <View>
+                    <Text style={{color:'#fff', fontWeight:'bold', fontSize: 16}}>🎯 COACHING STAFF</Text>
+                    <Text style={{color:'#888', fontSize:12}}>Change your coaching style</Text>
+                </View>
+                <Text style={{color:'#ff9800', fontSize: 20}}>→</Text>
             </TouchableOpacity>
 
             <Text style={styles.sectionTitle}>Next Matchup</Text>

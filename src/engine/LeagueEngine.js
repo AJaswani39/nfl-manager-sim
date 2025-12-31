@@ -21,10 +21,12 @@ export class LeagueEngine {
     this.news = []; // Array of { message, type, week }
     this.rosters = JSON.parse(JSON.stringify(ROSTERS)); // Mutable Rosters
     this.freeAgents = []; // Players not on any team
+    this.coaches = {}; // { teamId: coachType }
     this.currentWeek = 1;
     this.phase = 'preseason'; // 'preseason', 'regular', 'playoffs', 'offseason'
     this.initializeStandings();
     this.initializePlayerStats();
+    this.initializeCoaches();
   }
 
   initializeStandings() {
@@ -44,6 +46,82 @@ export class LeagueEngine {
         };
       });
     });
+  }
+
+  initializeCoaches() {
+    const coachTypes = this.getCoachTypes();
+    TEAMS.forEach(team => {
+      // Assign random coach to each team initially
+      const randomType = coachTypes[Math.floor(Math.random() * coachTypes.length)];
+      this.coaches[team.id] = randomType.id;
+    });
+  }
+
+  getCoachTypes() {
+    return [
+      {
+        id: 'aggressive',
+        name: 'Aggressive',
+        icon: '🔥',
+        description: 'High-risk, high-reward play calling',
+        bonuses: { offense: 5, defense: -3, developmentBonus: 0 }
+      },
+      {
+        id: 'conservative',
+        name: 'Conservative',
+        icon: '🛡️',
+        description: 'Safe, methodical gameplay',
+        bonuses: { offense: -3, defense: 5, developmentBonus: 0 }
+      },
+      {
+        id: 'balanced',
+        name: 'Balanced',
+        icon: '⚖️',
+        description: 'Well-rounded approach',
+        bonuses: { offense: 2, defense: 2, developmentBonus: 0 }
+      },
+      {
+        id: 'developmental',
+        name: 'Player Coach',
+        icon: '📈',
+        description: 'Focuses on player growth',
+        bonuses: { offense: 0, defense: 0, developmentBonus: 3 }
+      },
+      {
+        id: 'offensive',
+        name: 'Offensive Guru',
+        icon: '⚡',
+        description: 'Offensive mastermind',
+        bonuses: { offense: 8, defense: -5, developmentBonus: 0 }
+      },
+      {
+        id: 'defensive',
+        name: 'Defensive Mastermind',
+        icon: '🏰',
+        description: 'Shutdown defense specialist',
+        bonuses: { offense: -5, defense: 8, developmentBonus: 0 }
+      }
+    ];
+  }
+
+  setCoach(teamId, coachTypeId) {
+    const validCoach = this.getCoachTypes().find(c => c.id === coachTypeId);
+    if (validCoach) {
+      this.coaches[teamId] = coachTypeId;
+      this.addNews(`${teamId} hired a new ${validCoach.name} coach.`, 'transaction');
+      return true;
+    }
+    return false;
+  }
+
+  getCoach(teamId) {
+    const coachId = this.coaches[teamId] || 'balanced';
+    return this.getCoachTypes().find(c => c.id === coachId) || this.getCoachTypes()[2];
+  }
+
+  getCoachBonus(teamId, type) {
+    const coach = this.getCoach(teamId);
+    return coach.bonuses[type] || 0;
   }
 
   generateSchedule() {
@@ -991,6 +1069,7 @@ export class LeagueEngine {
       draftOrder: this.draftOrder,
       currentPickIndex: this.currentPickIndex,
       freeAgents: this.freeAgents,
+      coaches: this.coaches,
     };
   }
 
@@ -1010,6 +1089,7 @@ export class LeagueEngine {
     this.draftOrder = data.draftOrder;
     this.currentPickIndex = data.currentPickIndex;
     this.freeAgents = data.freeAgents || [];
+    this.coaches = data.coaches || {};
     return true;
   }
 
@@ -1028,8 +1108,10 @@ export class LeagueEngine {
     this.draftOrder = null;
     this.currentPickIndex = 0;
     this.freeAgents = [];
+    this.coaches = {};
     this.initializeStandings();
     this.initializePlayerStats();
+    this.initializeCoaches();
   }
 }
 

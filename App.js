@@ -15,6 +15,8 @@ import FreeAgencyScreen from './src/screens/FreeAgencyScreen';
 import TradeScreen from './src/screens/TradeScreen';
 import AwardsScreen from './src/screens/AwardsScreen';
 import SeasonRecapScreen from './src/screens/SeasonRecapScreen';
+import CompareScreen from './src/screens/CompareScreen';
+import CoachScreen from './src/screens/CoachScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -92,6 +94,16 @@ export default function App() {
         <Stack.Screen 
           name="SeasonRecap" 
           component={SeasonRecapScreen} 
+          options={{ headerShown: false }} 
+        />
+        <Stack.Screen 
+          name="Compare" 
+          component={CompareScreen} 
+          options={{ headerShown: false }} 
+        />
+        <Stack.Screen 
+          name="Coach" 
+          component={CoachScreen} 
           options={{ headerShown: false }} 
         />
         <Stack.Screen 
