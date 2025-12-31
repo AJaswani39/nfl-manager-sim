@@ -15,6 +15,10 @@ export default function SeasonScreen({ route, navigation }) {
     const unsubscribe = navigation.addListener('focus', () => {
       setCurrentWeek(league.currentWeek);
       setStandings(league.getStandingsSorted());
+      
+      // DEBUG
+      if (league.rosters['BUF']) console.log("[DEBUG] BUF Roster[0]:", league.rosters['BUF'][0].name);
+      if (league.rosters['BAL']) console.log("[DEBUG] BAL Roster[0]:", league.rosters['BAL'][0].name);
     });
     return unsubscribe;
   }, [navigation]);

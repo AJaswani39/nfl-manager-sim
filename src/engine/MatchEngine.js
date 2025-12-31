@@ -46,6 +46,14 @@ export class MatchEngine {
     this.awayRoster = awayRoster || [];
     
     this.performCoinToss();
+    
+    // DEBUG: Verify Rosters
+    if (this.homeRoster.length > 0) {
+        this.addToLog(`[DEBUG] Home (${homeTeam.id}): ${this.homeRoster[0].name}`);
+    }
+    if (this.awayRoster.length > 0) {
+        this.addToLog(`[DEBUG] Away (${awayTeam.id}): ${this.awayRoster[0].name}`);
+    }
   }
 
   isInjured(pid) {
@@ -386,16 +394,21 @@ export class MatchEngine {
       const roster = team.id === this.homeTeam.id ? this.homeRoster : this.awayRoster;
       if (!roster || roster.length === 0) return { name: 'Player' };
       
-      const pool = roster.filter(p => !this.isInjured(p.id));
+      // Safety: Ensure we only pick players matching the Team ID (if IDs follow convention)
+      // Convention: teamId_number (e.g. buf_1) OR rookie_...
+      const prefix = team.id.toLowerCase() + '_';
+      const cleanRoster = roster.filter(p => p.id && (p.id.startsWith(prefix) || p.id.startsWith('rookie_')));
+      const pool = (cleanRoster.length > 0 ? cleanRoster : roster).filter(p => !this.isInjured(p.id));
+      
       // If pool empty, forced to use injured players (desperation)
-      const validRoster = pool.length > 0 ? pool : roster;
+      const validRoster = pool.length > 0 ? pool : (cleanRoster.length > 0 ? cleanRoster : roster);
       
       let candidates = [];
-      if (positionGroup === 'QB') candidates = roster.filter(p => p.position === 'QB');
-      else if (positionGroup === 'RB') candidates = roster.filter(p => p.position === 'RB');
-      else if (positionGroup === 'WR') candidates = roster.filter(p => p.position === 'WR' || p.position === 'TE');
-      else if (positionGroup === 'DL') candidates = roster.filter(p => p.position === 'DL' || p.position === 'LB'); // Front 7
-      else if (positionGroup === 'DB') candidates = roster.filter(p => p.position === 'CB' || p.position === 'S'); // Secondary
+      if (positionGroup === 'QB') candidates = validRoster.filter(p => p.position === 'QB');
+      else if (positionGroup === 'RB') candidates = validRoster.filter(p => p.position === 'RB');
+      else if (positionGroup === 'WR') candidates = validRoster.filter(p => p.position === 'WR' || p.position === 'TE');
+      else if (positionGroup === 'DL') candidates = validRoster.filter(p => p.position === 'DL' || p.position === 'LB'); // Front 7
+      else if (positionGroup === 'DB') candidates = validRoster.filter(p => p.position === 'CB' || p.position === 'S'); // Secondary
       // Fallback
       if (candidates.length === 0) candidates = validRoster; 
       
