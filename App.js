@@ -19,6 +19,9 @@ import CompareScreen from './src/screens/CompareScreen';
 import CoachScreen from './src/screens/CoachScreen';
 import FranchiseScreen from './src/screens/FranchiseScreen';
 import SalaryCapScreen from './src/screens/SalaryCapScreen';
+import RosterScreen from './src/screens/RosterScreen';
+import ScheduleScreen from './src/screens/ScheduleScreen';
+import SettingsScreen from './src/screens/SettingsScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -116,6 +119,21 @@ export default function App() {
         <Stack.Screen 
           name="SalaryCap" 
           component={SalaryCapScreen} 
+          options={{ headerShown: false }} 
+        />
+        <Stack.Screen 
+          name="Roster" 
+          component={RosterScreen} 
+          options={{ headerShown: false }} 
+        />
+        <Stack.Screen 
+          name="Schedule" 
+          component={ScheduleScreen} 
+          options={{ headerShown: false }} 
+        />
+        <Stack.Screen 
+          name="Settings" 
+          component={SettingsScreen} 
           options={{ headerShown: false }} 
         />
         <Stack.Screen 
