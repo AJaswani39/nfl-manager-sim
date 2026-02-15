@@ -492,7 +492,7 @@ export class LeagueEngine {
     else if (this.phase === 'regular') {
        this.checkElimination();
     } 
-    else if (this.phase === 'playoffs') {
+    else if (this.phase === 'playoffs' && weekMatches.length > 0) {
        // Just finished a playoff week, generate next
        const lastRound = weekMatches[0].type;
        if (lastRound === 'Wild Card') this.generatePlayoffRound('Divisional');
@@ -818,7 +818,8 @@ export class LeagueEngine {
   // Calculate Probability (Monte Carlo Lite)
   // We run 50 simulations of the remaining season
   calculatePlayoffOdds() {
-    if (this.currentWeek > 17) return {}; // Season over, odds are 100% or 0%
+    const totalRegWeeks = 3 + 17; // 20 (preseason + regular)
+    if (this.currentWeek > totalRegWeeks) return {}; // Season over, odds are 100% or 0%
 
     const SIMULATIONS = 50;
     const teamPlayoffCounts = {};
@@ -831,10 +832,11 @@ export class LeagueEngine {
     for (let sim = 0; sim < SIMULATIONS; sim++) {
       // 1. Clone Standings
       const simStandings = JSON.parse(JSON.stringify(currentStandings));
-      
+
       // 2. Simulate Remaining Games
-      for (let w = startWeek; w <= 17; w++) {
+      for (let w = startWeek; w <= totalRegWeeks; w++) {
         const weekMatches = this.weeks[w-1];
+        if (!weekMatches) continue;
         weekMatches.forEach(match => {
            // Quick sim: 50/50 + rating bias
            const homeAdv = match.home.ratings.overall > match.away.ratings.overall ? 0.6 : 0.4;
@@ -1208,25 +1210,27 @@ export class LeagueEngine {
   }
 
   loadSaveData(data) {
-    if (!data) return false;
-    this.weeks = data.weeks || [];
-    this.standings = data.standings || {};
-    this.playerStats = data.playerStats || {};
-    this.playerState = data.playerState || {};
-    this.news = data.news || [];
-    this.rosters = data.rosters || JSON.parse(JSON.stringify(ROSTERS));
-    this.currentWeek = data.currentWeek || 1;
-    this.phase = data.phase || 'preseason';
+    if (!data || typeof data !== 'object') return false;
+
+    // Validate critical fields have the right types before assigning
+    this.weeks = Array.isArray(data.weeks) ? data.weeks : [];
+    this.standings = (data.standings && typeof data.standings === 'object' && !Array.isArray(data.standings)) ? data.standings : {};
+    this.playerStats = (data.playerStats && typeof data.playerStats === 'object' && !Array.isArray(data.playerStats)) ? data.playerStats : {};
+    this.playerState = (data.playerState && typeof data.playerState === 'object' && !Array.isArray(data.playerState)) ? data.playerState : {};
+    this.news = Array.isArray(data.news) ? data.news : [];
+    this.rosters = (data.rosters && typeof data.rosters === 'object' && !Array.isArray(data.rosters)) ? data.rosters : JSON.parse(JSON.stringify(ROSTERS));
+    this.currentWeek = typeof data.currentWeek === 'number' ? data.currentWeek : 1;
+    this.phase = typeof data.phase === 'string' ? data.phase : 'preseason';
     this.userTeamId = data.userTeamId;
-    this.season = data.season || 1;
-    this.draftClass = data.draftClass;
-    this.draftOrder = data.draftOrder;
-    this.currentPickIndex = data.currentPickIndex;
-    this.freeAgents = data.freeAgents || [];
-    this.coaches = data.coaches || {};
-    this.salaries = data.salaries || {};
-    this.teamCaps = data.teamCaps || {};
-    this.franchiseHistory = data.franchiseHistory || [];
+    this.season = typeof data.season === 'number' ? data.season : 1;
+    this.draftClass = Array.isArray(data.draftClass) ? data.draftClass : null;
+    this.draftOrder = Array.isArray(data.draftOrder) ? data.draftOrder : null;
+    this.currentPickIndex = typeof data.currentPickIndex === 'number' ? data.currentPickIndex : 0;
+    this.freeAgents = Array.isArray(data.freeAgents) ? data.freeAgents : [];
+    this.coaches = (data.coaches && typeof data.coaches === 'object' && !Array.isArray(data.coaches)) ? data.coaches : {};
+    this.salaries = (data.salaries && typeof data.salaries === 'object' && !Array.isArray(data.salaries)) ? data.salaries : {};
+    this.teamCaps = (data.teamCaps && typeof data.teamCaps === 'object' && !Array.isArray(data.teamCaps)) ? data.teamCaps : {};
+    this.franchiseHistory = Array.isArray(data.franchiseHistory) ? data.franchiseHistory : [];
     this.superBowlWinner = data.superBowlWinner || null;
     return true;
   }

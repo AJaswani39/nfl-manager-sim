@@ -61,7 +61,7 @@ export class MatchEngine {
   }
 
   checkForInjury(player) {
-      if (!player) return;
+      if (!player || !player.id) return;
       if (Math.random() < 0.015) { // 1.5% Chance
           const weeks = Math.floor(Math.random() * 5) + 1; 
           this.injuries[player.id] = { weeksOut: weeks };
@@ -95,9 +95,12 @@ export class MatchEngine {
       if (Math.random() < 0.03) {
           this.state.ballOn -= 5;
           this.state.distance += 5;
+          // Clamp: can't push back past the 1 (half-the-distance-to-goal in NFL)
+          if (this.state.ballOn < 1) {
+              this.state.distance -= (1 - this.state.ballOn); // undo excess
+              this.state.ballOn = 1;
+          }
           this.addToLog("FALSE START! Offense pushed back 5 yards.");
-          // No choice, just a notification interruption? 
-          // Or just happen instantly. Let's make it an interruption so user sees it.
           this.state.pendingEvent = {
               type: 'PENALTY',
               title: 'False Start',
@@ -113,7 +116,11 @@ export class MatchEngine {
           this.addToLog("ENCROACHMENT! Defense jumps offside. 5 yards.");
           this.state.ballOn += 5;
           this.state.distance -= 5;
-          
+          // Clamp: can't advance past the goal line on a dead-ball foul
+          if (this.state.ballOn > 99) {
+              this.state.ballOn = 99;
+          }
+
           if (this.state.distance <= 0) {
               this.state.down = 1;
               this.state.distance = 10;
@@ -365,14 +372,27 @@ export class MatchEngine {
                    }
                    
                    const finalSpot = landingSpot - returnYards;
-                   newLoc = 100 - finalSpot;
-                   
-                   // Ensure not out of back of endzone (safety?)
-                   if (newLoc <= 0) {
-                       // Safety? Unlikely on return unless ran backwards
-                       newLoc = 1; 
+
+                   // Returner scored (ran it all the way back)
+                   if (finalSpot <= 0) {
+                       this.state.ballOn = 100;
+                       this.score(7);
+                       this.addToLog("PUNT RETURN TOUCHDOWN!!!");
+                       this.changePossession('score');
+                       return;
                    }
-                   
+
+                   newLoc = 100 - finalSpot;
+
+                   // Clamp: can't go behind own end zone
+                   if (newLoc <= 0) {
+                       newLoc = 1;
+                   }
+                   // Clamp: can't exceed field (shouldn't happen, but safety net)
+                   if (newLoc > 99) {
+                       newLoc = 99;
+                   }
+
                    this.addToLog(`Punt returned ${returnYards} yds to ${this.getYardLineText(newLoc)}.`);
               }
           }
@@ -392,7 +412,7 @@ export class MatchEngine {
       // teamType: 'OFF' or 'DEF'
       const team = teamType === 'OFF' ? this.getOffenseTeam() : this.getDefenseTeam();
       const roster = team.id === this.homeTeam.id ? this.homeRoster : this.awayRoster;
-      if (!roster || roster.length === 0) return { name: 'Player' };
+      if (!roster || roster.length === 0) return { id: null, name: 'Player', position: 'OL' };
       
       // Safety: Ensure we only pick players matching the Team ID (if IDs follow convention)
       // Convention: teamId_number (e.g. buf_1) OR rookie_...
@@ -409,8 +429,10 @@ export class MatchEngine {
       else if (positionGroup === 'WR') candidates = validRoster.filter(p => p.position === 'WR' || p.position === 'TE');
       else if (positionGroup === 'DL') candidates = validRoster.filter(p => p.position === 'DL' || p.position === 'LB'); // Front 7
       else if (positionGroup === 'DB') candidates = validRoster.filter(p => p.position === 'CB' || p.position === 'S'); // Secondary
+      else if (positionGroup === 'K') candidates = validRoster.filter(p => p.position === 'K');
+      else if (positionGroup === 'P') candidates = validRoster.filter(p => p.position === 'P' || p.position === 'K');
       // Fallback
-      if (candidates.length === 0) candidates = validRoster; 
+      if (candidates.length === 0) candidates = validRoster;
       
       return candidates[Math.floor(Math.random() * candidates.length)];
   }
@@ -766,6 +788,7 @@ export class MatchEngine {
     this.state.timeRemaining -= timeBurn;
 
     if (this.state.timeRemaining <= 0) {
+      this.state.timeRemaining = 0; // Clamp so log doesn't show negative time
       // Quarter Change
       if (this.state.quarter < 4) {
          
