@@ -189,12 +189,15 @@ export class LeagueEngine {
   // FRANCHISE HISTORY
   recordSeasonHistory() {
     const standings = this.getStandingsSorted();
-    const champion = standings[0];
+    const champion = this.superBowlWinner || standings[0]; // prefer actual SB winner
+    const champStandings = champion ? this.standings[champion.id] : null;
     const awards = this.getAwards();
-    
+
     const seasonRecord = {
       season: this.season,
-      champion: champion ? { id: champion.id, name: champion.name, record: `${champion.w}-${champion.l}` } : null,
+      champion: champion
+        ? { id: champion.id, name: champion.name, record: champStandings ? `${champStandings.w}-${champStandings.l}` : '?' }
+        : null,
       mvp: awards?.mvp ? { name: awards.mvp.name, teamId: awards.mvp.teamId, position: awards.mvp.position } : null,
       opoy: awards?.opoy ? { name: awards.opoy.name, teamId: awards.opoy.teamId } : null,
       dpoy: awards?.dpoy ? { name: awards.dpoy.name, teamId: awards.dpoy.teamId } : null,
@@ -284,62 +287,62 @@ export class LeagueEngine {
        // We need to know who won the WC round to re-seed.
        // The previous week (last in this.weeks) contains the results.
        const lastWeek = this.weeks[this.weeks.length - 1];
-       const winners = lastWeek.map(m => m.result.homeScore > m.result.awayScore ? m.home : m.away);
-       
+       const winners = lastWeek
+         .filter(m => m.result != null) // guard against unplayed games
+         .map(m => m.result.homeScore >= m.result.awayScore ? m.home : m.away);
+
        ['AFC', 'NFC'].forEach(conf => {
           // Get Seed 1 (who had bye)
           const allSeeds = this.getPlayoffPicture()[conf];
           const seed1 = allSeeds[0];
-          
+
           // Get WC Winners for this conference
           const confWinners = winners.filter(t => t.conference === conf);
-          
-          // Re-seed: Sort winners by their original seed index logic (or just find them in allSeeds)
-          // Actually, we can just look up their seed index in allSeeds
+          if (confWinners.length < 2) return; // not enough results to generate matchups
+
+          // Re-seed by original playoff seed order
           confWinners.sort((a,b) => {
              const idxA = allSeeds.findIndex(s => s.id === a.id);
              const idxB = allSeeds.findIndex(s => s.id === b.id);
              return idxA - idxB;
-          }); 
+          });
           // Lowest seed (highest index) plays Seed 1
-          const lowestSeed = confWinners.pop(); // Last one is worst seed
-          const bestWCSeed = confWinners[0];    // Best remaining WC winner
-          const secondBestWC = confWinners[1];  // Middle WC winner (wait, only 3 games. 3 winners.)
-          
-          // Matchups:
-          // 1 vs Lowest Remaining
-          // 2nd Highest Remaining vs 3rd Highest Remaining (Wait. 3 winners + 1 Bye = 4 Teams)
-          // Teams: Seed 1, WC1, WC2, WC3 (Sorted by seed quality)
-          // Lowest seed is WC3. 
           // Match 1: Seed 1 vs WC3 (Lowest)
           // Match 2: WC1 vs WC2
-          
+          const lowestSeed = confWinners.pop(); // worst seeded WC winner
+
           newMatches.push(this.createMatch(w, seed1, lowestSeed, 'Divisional'));
-          newMatches.push(this.createMatch(w, confWinners[0], confWinners[1], 'Divisional'));
+          if (confWinners.length >= 2) {
+            newMatches.push(this.createMatch(w, confWinners[0], confWinners[1], 'Divisional'));
+          }
        });
     }
     // CONFERENCE CHAMPIONSHIP
     else if (roundName === 'Conference') {
        const lastWeek = this.weeks[this.weeks.length - 1];
-       const winners = lastWeek.map(m => m.result.homeScore > m.result.awayScore ? m.home : m.away);
-       
+       const winners = lastWeek
+         .filter(m => m.result != null)
+         .map(m => m.result.homeScore >= m.result.awayScore ? m.home : m.away);
+
        ['AFC', 'NFC'].forEach(conf => {
           const confWinners = winners.filter(t => t.conference === conf);
-          // Higher seed assumes Home Field. Re-sort by generic seed logic if needed, 
-          // but simulateWeek updates standings? No, playoffs don't update W/L.
-          // We rely on getPlayoffPicture for initial seed order.
+          if (confWinners.length < 2) return; // guard: need exactly 2 per conference
           const allSeeds = this.getPlayoffPicture()[conf];
-          confWinners.sort((a,b) => allSeeds.findIndex(s=>s.id===a.id) - allSeeds.findIndex(s=>s.id===b.id)); // Best seed first
-          
+          confWinners.sort((a,b) => allSeeds.findIndex(s=>s.id===a.id) - allSeeds.findIndex(s=>s.id===b.id));
+
           newMatches.push(this.createMatch(w, confWinners[0], confWinners[1], 'Conference'));
        });
     }
     // SUPER BOWL
     else if (roundName === 'Super Bowl') {
        const lastWeek = this.weeks[this.weeks.length - 1];
-       const winners = lastWeek.map(m => m.result.homeScore > m.result.awayScore ? m.home : m.away);
-       // Should be 1 AFC and 1 NFC
-       newMatches.push(this.createMatch(w, winners[0], winners[1], 'Super Bowl'));
+       const winners = lastWeek
+         .filter(m => m.result != null)
+         .map(m => m.result.homeScore >= m.result.awayScore ? m.home : m.away);
+       if (winners.length >= 2) {
+         // winners[0] = AFC champion, winners[1] = NFC champion
+         newMatches.push(this.createMatch(w, winners[0], winners[1], 'Super Bowl'));
+       }
     }
 
     this.weeks.push(newMatches);
@@ -489,6 +492,13 @@ export class LeagueEngine {
        else if (lastRound === 'Divisional') this.generatePlayoffRound('Conference');
        else if (lastRound === 'Conference') this.generatePlayoffRound('Super Bowl');
        else if (lastRound === 'Super Bowl') {
+          // Record the actual Super Bowl winner before transitioning
+          const sbMatch = weekMatches[0];
+          if (sbMatch && sbMatch.result) {
+            this.superBowlWinner = sbMatch.result.homeScore >= sbMatch.result.awayScore
+              ? sbMatch.home
+              : sbMatch.away;
+          }
           this.phase = 'offseason'; // End of season
        }
     }
@@ -535,8 +545,19 @@ export class LeagueEngine {
     return Math.max(0, Math.floor(score));
   }
 
+  ensurePlayerStats(playerId) {
+    if (!this.playerStats[playerId]) {
+      this.playerStats[playerId] = {
+        passingYards: 0, passingTDs: 0, passingAtt: 0, passingComp: 0,
+        rushingYards: 0, rushingTDs: 0, rushingAtt: 0,
+        receivingYards: 0, receivingTDs: 0, receptions: 0,
+        tackles: 0, sacks: 0, interceptions: 0
+      };
+    }
+  }
+
   distributeStats(teamId, score) {
-    const roster = ROSTERS[teamId];
+    const roster = this.rosters[teamId];
     if (!roster) return;
 
     const qb = roster.find(p => p.position === 'QB');
@@ -559,6 +580,7 @@ export class LeagueEngine {
 
     // 3. Assign to Players (Update state)
     if (qb) {
+      this.ensurePlayerStats(qb.id);
       this.playerStats[qb.id].passingYards += passingYards;
       this.playerStats[qb.id].passingTDs += passingTDs;
     }
@@ -568,6 +590,7 @@ export class LeagueEngine {
       let remainingRush = rushingYards;
       let remainingRushTD = rushingTDs;
       rbs.forEach((rb, idx) => {
+        this.ensurePlayerStats(rb.id);
         if (idx === rbs.length - 1) {
           this.playerStats[rb.id].rushingYards += remainingRush;
           this.playerStats[rb.id].rushingTDs += remainingRushTD;
@@ -587,17 +610,18 @@ export class LeagueEngine {
       let remainingPass = passingYards;
       let remainingPassTD = passingTDs;
       wrs.forEach((wr, idx) => {
-         if (idx === wrs.length - 1) {
-           this.playerStats[wr.id].receivingYards += remainingPass;
-           this.playerStats[wr.id].receivingTDs += remainingPassTD;
-         } else {
-           const share = Math.floor(remainingPass * Math.random());
-           const tdShare = remainingPassTD > 0 && Math.random() > 0.7 ? 1 : 0;
-           this.playerStats[wr.id].receivingYards += share;
-           this.playerStats[wr.id].receivingTDs += tdShare;
-           remainingPass -= share;
-           remainingPassTD -= tdShare;
-         }
+        this.ensurePlayerStats(wr.id);
+        if (idx === wrs.length - 1) {
+          this.playerStats[wr.id].receivingYards += remainingPass;
+          this.playerStats[wr.id].receivingTDs += remainingPassTD;
+        } else {
+          const share = Math.floor(remainingPass * Math.random());
+          const tdShare = remainingPassTD > 0 && Math.random() > 0.7 ? 1 : 0;
+          this.playerStats[wr.id].receivingYards += share;
+          this.playerStats[wr.id].receivingTDs += tdShare;
+          remainingPass -= share;
+          remainingPassTD -= tdShare;
+        }
       });
     }
   }
@@ -1077,7 +1101,8 @@ export class LeagueEngine {
       // 0. Record history before resetting
       this.recordSeasonHistory();
       this.season = (this.season || 1) + 1;
-      this.awards = null; // Reset awards for new season
+      this.awards = null;        // Reset awards for new season
+      this.superBowlWinner = null; // Reset SB winner for new season
       
       // 1. Reset Week
       this.currentWeek = 1;
@@ -1168,6 +1193,7 @@ export class LeagueEngine {
       salaries: this.salaries,
       teamCaps: this.teamCaps,
       franchiseHistory: this.franchiseHistory,
+      superBowlWinner: this.superBowlWinner || null,
     };
   }
 
@@ -1191,6 +1217,7 @@ export class LeagueEngine {
     this.salaries = data.salaries || {};
     this.teamCaps = data.teamCaps || {};
     this.franchiseHistory = data.franchiseHistory || [];
+    this.superBowlWinner = data.superBowlWinner || null;
     return true;
   }
 
