@@ -14,8 +14,15 @@ const shuffle = (array) => {
 
 export class LeagueEngine {
   constructor() {
+    // Snapshot original TEAMS ratings so resetGame() can fully restore them
+    this._originalTeamRatings = TEAMS.map(t => ({
+      id: t.id,
+      offense: t.ratings.offense,
+      defense: t.ratings.defense,
+      overall: t.ratings.overall,
+    }));
     this.weeks = []; // Array of arrays of matches
-    this.standings = {}; 
+    this.standings = {};
     this.playerStats = {}; // { playerId: { passingYards: 0, touchdowns: 0, ... } }
     this.playerState = {}; // { playerId: { weeksOut: 0 } }
     this.news = []; // Array of { message, type, week }
@@ -628,6 +635,7 @@ export class LeagueEngine {
 
   updateStandings(teamId, pointsFor, pointsAgainst) {
     const entry = this.standings[teamId];
+    if (!entry) return;
     entry.pf += pointsFor;
     entry.pa += pointsAgainst;
     if (pointsFor > pointsAgainst) entry.w++;
@@ -938,8 +946,10 @@ export class LeagueEngine {
   }
 
   userSelectPlayer(userTeamId, playerIndex) {
+      if (!this.draftClass || playerIndex < 0 || playerIndex >= this.draftClass.length) return null;
       const pick = this.draftClass.splice(playerIndex, 1)[0];
-      
+      if (!pick) return null;
+
       pick.stats = {};
       if (!this.rosters[userTeamId]) this.rosters[userTeamId] = [];
       this.rosters[userTeamId].push(pick);
@@ -1072,23 +1082,23 @@ export class LeagueEngine {
     // Move players1 from team1 to team2
     players1.forEach(playerId => {
       const roster = this.rosters[team1Id];
-      const idx = roster?.findIndex(p => p.id === playerId);
-      if (idx !== -1) {
-        const player = roster.splice(idx, 1)[0];
-        if (!this.rosters[team2Id]) this.rosters[team2Id] = [];
-        this.rosters[team2Id].push(player);
-      }
+      if (!roster) return;
+      const idx = roster.findIndex(p => p.id === playerId);
+      if (idx === -1) return;
+      const player = roster.splice(idx, 1)[0];
+      if (!this.rosters[team2Id]) this.rosters[team2Id] = [];
+      this.rosters[team2Id].push(player);
     });
 
     // Move players2 from team2 to team1
     players2.forEach(playerId => {
       const roster = this.rosters[team2Id];
-      const idx = roster?.findIndex(p => p.id === playerId);
-      if (idx !== -1) {
-        const player = roster.splice(idx, 1)[0];
-        if (!this.rosters[team1Id]) this.rosters[team1Id] = [];
-        this.rosters[team1Id].push(player);
-      }
+      if (!roster) return;
+      const idx = roster.findIndex(p => p.id === playerId);
+      if (idx === -1) return;
+      const player = roster.splice(idx, 1)[0];
+      if (!this.rosters[team1Id]) this.rosters[team1Id] = [];
+      this.rosters[team1Id].push(player);
     });
 
     // Generate news
@@ -1222,6 +1232,16 @@ export class LeagueEngine {
   }
 
   resetGame() {
+    // Restore original TEAMS ratings that may have been mutated by startNewSeason
+    this._originalTeamRatings.forEach(orig => {
+      const team = TEAMS.find(t => t.id === orig.id);
+      if (team) {
+        team.ratings.offense = orig.offense;
+        team.ratings.defense = orig.defense;
+        team.ratings.overall = orig.overall;
+      }
+    });
+
     this.weeks = [];
     this.standings = {};
     this.playerStats = {};
