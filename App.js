@@ -1,6 +1,8 @@
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import ErrorBoundary from './src/components/ErrorBoundary';
+import withErrorBoundary from './src/components/withErrorBoundary';
 import HomeScreen from './src/screens/HomeScreen';
 import TeamDetailScreen from './src/screens/TeamDetailScreen';
 
@@ -27,136 +29,138 @@ const Stack = createNativeStackNavigator();
 
 export default function App() {
   return (
-    <NavigationContainer>
-      <Stack.Navigator 
-        initialRouteName="Home"
-        screenOptions={{
-          headerStyle: { backgroundColor: '#fff' },
-          headerTintColor: '#1a1a1a',
-          headerTitleStyle: { fontWeight: 'bold' },
-          headerShadowVisible: false, // Cleaner look
-        }}
-      >
-        <Stack.Screen 
-          name="Home" 
-          component={HomeScreen} 
-          options={{ headerShown: false }} // We have a custom header in HomeScreen
-        />
-        <Stack.Screen 
-          name="TeamDetail" 
-          component={TeamDetailScreen} 
-          options={{ 
-            title: 'Team Roster',
-            headerTransparent: true,
-            headerTintColor: '#fff',
-            headerTitle: '', // Hide title as the custom header covers it
+    <ErrorBoundary>
+      <NavigationContainer>
+        <Stack.Navigator
+          initialRouteName="Home"
+          screenOptions={{
+            headerStyle: { backgroundColor: '#fff' },
+            headerTintColor: '#1a1a1a',
+            headerTitleStyle: { fontWeight: 'bold' },
+            headerShadowVisible: false, // Cleaner look
           }}
-        />
-        <Stack.Screen 
-          name="Season" 
-          component={SeasonScreen} 
-          options={{ 
-            title: 'Season Mode',
-            headerTransparent: true,
-            headerTintColor: '#fff',
-            headerTitle: '', 
-          }}
-        />
-        <Stack.Screen 
-          name="Match" 
-          component={MatchScreen} 
-          options={{ 
-            title: 'Game Day',
-            headerStyle: { backgroundColor: '#000' },
-            headerTintColor: '#fff',
-          }}
-        />
-        <Stack.Screen 
-          name="News" 
-          component={NewsScreen} 
-          options={{ headerShown: false }} 
-        />
-        <Stack.Screen 
-          name="Leaderboard" 
-          component={LeaderboardScreen} 
-          options={{ headerShown: false }} 
-        />
-        <Stack.Screen 
-          name="FreeAgency" 
-          component={FreeAgencyScreen} 
-          options={{ headerShown: false }} 
-        />
-        <Stack.Screen 
-          name="Trade" 
-          component={TradeScreen} 
-          options={{ headerShown: false }} 
-        />
-        <Stack.Screen 
-          name="Awards" 
-          component={AwardsScreen} 
-          options={{ headerShown: false }} 
-        />
-        <Stack.Screen 
-          name="SeasonRecap" 
-          component={SeasonRecapScreen} 
-          options={{ headerShown: false }} 
-        />
-        <Stack.Screen 
-          name="Compare" 
-          component={CompareScreen} 
-          options={{ headerShown: false }} 
-        />
-        <Stack.Screen 
-          name="Coach" 
-          component={CoachScreen} 
-          options={{ headerShown: false }} 
-        />
-        <Stack.Screen 
-          name="Franchise" 
-          component={FranchiseScreen} 
-          options={{ headerShown: false }} 
-        />
-        <Stack.Screen 
-          name="SalaryCap" 
-          component={SalaryCapScreen} 
-          options={{ headerShown: false }} 
-        />
-        <Stack.Screen 
-          name="Roster" 
-          component={RosterScreen} 
-          options={{ headerShown: false }} 
-        />
-        <Stack.Screen 
-          name="Schedule" 
-          component={ScheduleScreen} 
-          options={{ headerShown: false }} 
-        />
-        <Stack.Screen 
-          name="Settings" 
-          component={SettingsScreen} 
-          options={{ headerShown: false }} 
-        />
-        <Stack.Screen 
-          name="Draft" 
-          component={DraftScreen} 
-          options={{ 
-            title: 'Offseason Draft',
-            headerStyle: { backgroundColor: '#1e272e' },
-            headerTintColor: '#feca57',
-            headerLeft: null, // Prevent going back during draft
-          }}
-        />
-        <Stack.Screen 
-          name="BoxScore" 
-          component={BoxScoreScreen} 
-          options={{ 
-            title: 'Post Game Stats',
-            headerStyle: { backgroundColor: '#1e1e1e' },
-            headerTintColor: '#fff',
-            headerLeft: null, 
-          }}
-        />
-      </Stack.Navigator>
-    </NavigationContainer>
+        >
+          <Stack.Screen
+            name="Home"
+            component={withErrorBoundary(HomeScreen)}
+            options={{ headerShown: false }} // We have a custom header in HomeScreen
+          />
+          <Stack.Screen
+            name="TeamDetail"
+            component={withErrorBoundary(TeamDetailScreen)}
+            options={{
+              title: 'Team Roster',
+              headerTransparent: true,
+              headerTintColor: '#fff',
+              headerTitle: '', // Hide title as the custom header covers it
+            }}
+          />
+          <Stack.Screen
+            name="Season"
+            component={withErrorBoundary(SeasonScreen)}
+            options={{
+              title: 'Season Mode',
+              headerTransparent: true,
+              headerTintColor: '#fff',
+              headerTitle: '',
+            }}
+          />
+          <Stack.Screen
+            name="Match"
+            component={withErrorBoundary(MatchScreen)}
+            options={{
+              title: 'Game Day',
+              headerStyle: { backgroundColor: '#000' },
+              headerTintColor: '#fff',
+            }}
+          />
+          <Stack.Screen
+            name="News"
+            component={withErrorBoundary(NewsScreen)}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="Leaderboard"
+            component={withErrorBoundary(LeaderboardScreen)}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="FreeAgency"
+            component={withErrorBoundary(FreeAgencyScreen)}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="Trade"
+            component={withErrorBoundary(TradeScreen)}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="Awards"
+            component={withErrorBoundary(AwardsScreen)}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="SeasonRecap"
+            component={withErrorBoundary(SeasonRecapScreen)}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="Compare"
+            component={withErrorBoundary(CompareScreen)}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="Coach"
+            component={withErrorBoundary(CoachScreen)}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="Franchise"
+            component={withErrorBoundary(FranchiseScreen)}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="SalaryCap"
+            component={withErrorBoundary(SalaryCapScreen)}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="Roster"
+            component={withErrorBoundary(RosterScreen)}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="Schedule"
+            component={withErrorBoundary(ScheduleScreen)}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="Settings"
+            component={withErrorBoundary(SettingsScreen)}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="Draft"
+            component={withErrorBoundary(DraftScreen)}
+            options={{
+              title: 'Offseason Draft',
+              headerStyle: { backgroundColor: '#1e272e' },
+              headerTintColor: '#feca57',
+              headerLeft: null, // Prevent going back during draft
+            }}
+          />
+          <Stack.Screen
+            name="BoxScore"
+            component={withErrorBoundary(BoxScoreScreen)}
+            options={{
+              title: 'Post Game Stats',
+              headerStyle: { backgroundColor: '#1e1e1e' },
+              headerTintColor: '#fff',
+              headerLeft: null,
+            }}
+          />
+        </Stack.Navigator>
+      </NavigationContainer>
+    </ErrorBoundary>
   );
 }
