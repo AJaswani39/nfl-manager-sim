@@ -48,13 +48,15 @@ export class LeagueEngine {
   }
 
   initializePlayerStats() {
-    Object.keys(ROSTERS).forEach(teamId => {
-      ROSTERS[teamId].forEach(player => {
+    const rosters = this.rosters || ROSTERS;
+    Object.keys(rosters).forEach(teamId => {
+      rosters[teamId].forEach(player => {
         this.playerStats[player.id] = {
-          passingYards: 0, passingTDs: 0,
-          rushingYards: 0, rushingTDs: 0,
-          receivingYards: 0, receivingTDs: 0,
-          tackles: 0, sacks: 0
+          passingYards: 0, passingTDs: 0, passingAtt: 0, passingComp: 0,
+          rushingYards: 0, rushingTDs: 0, rushingAtt: 0,
+          receivingYards: 0, receivingTDs: 0, receptions: 0,
+          tackles: 0, sacks: 0, interceptions: 0,
+          defTDs: 0, fumblesRecovered: 0
         };
       });
     });
@@ -1254,6 +1256,7 @@ export class LeagueEngine {
       teamCaps: this.teamCaps,
       franchiseHistory: this.franchiseHistory,
       superBowlWinner: this.superBowlWinner || null,
+      awards: this.awards || null,
     };
   }
 
@@ -1278,6 +1281,7 @@ export class LeagueEngine {
     this.teamCaps = data.teamCaps || {};
     this.franchiseHistory = data.franchiseHistory || [];
     this.superBowlWinner = data.superBowlWinner || null;
+    this.awards = data.awards || null;
     return true;
   }
 

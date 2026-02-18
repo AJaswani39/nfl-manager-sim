@@ -36,10 +36,12 @@ export default function MatchScreen({ route, navigation }) {
     // Check if AI is Kickoff mode
     if (gameState.kickoffPending && !isUserOffense) {
         // AI Logic for Kickoff
-        // If losing by > 8 in Q4, try Onside?
-        // Simple: 5% chance of Onside if losing in Q4
+        // If losing in Q4, chance of onside kick
         let kickType = 'NORMAL';
-        if (gameState.quarter === 4 && gameState.awayScore < gameState.homeScore) {
+        const aiIsHome = userTeamId !== homeId;
+        const aiScore = aiIsHome ? gameState.homeScore : gameState.awayScore;
+        const userScore = aiIsHome ? gameState.awayScore : gameState.homeScore;
+        if (gameState.quarter === 4 && aiScore < userScore) {
             if (Math.random() < 0.2) kickType = 'ONSIDE';
         }
         engine.resolveKickoff(kickType);
@@ -51,7 +53,8 @@ export default function MatchScreen({ route, navigation }) {
     
     // 1. AI Choice
     let aiChoice;
-    const isUserOff = engine.state.possession === 'home'; 
+    const isUserHome = userTeamId === homeId;
+    const isUserOff = isUserHome ? engine.state.possession === 'home' : engine.state.possession === 'away';
     
     if (!isUserOff) {
         // AI is Offense
@@ -211,7 +214,8 @@ export default function MatchScreen({ route, navigation }) {
     );
   };
 
-  const isUserOffense = gameState.possession === 'home'; // User is always Home for MVP
+  const isUserHome = userTeamId === homeId;
+  const isUserOffense = isUserHome ? gameState.possession === 'home' : gameState.possession === 'away';
 
   return (
     <SafeAreaView style={styles.container}>

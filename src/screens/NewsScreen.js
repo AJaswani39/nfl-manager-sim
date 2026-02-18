@@ -9,6 +9,13 @@ export default function NewsScreen({ navigation }) {
         setNews([...league.news]);
     }, []);
 
+    useEffect(() => {
+        const unsubscribe = navigation.addListener('focus', () => {
+            setNews([...league.news]);
+        });
+        return unsubscribe;
+    }, [navigation]);
+
     const renderItem = ({ item }) => (
         <View style={styles.newsItem}>
             <View style={styles.headerRow}>
