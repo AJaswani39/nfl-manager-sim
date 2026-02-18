@@ -901,16 +901,16 @@ export class LeagueEngine {
      this.draftClass = [];
      for(let i=0; i<60; i++) { // 60 prospects
          const pos = positions[Math.floor(Math.random() * positions.length)];
-         const rating = 65 + Math.floor(Math.random() * 25); // 65-90
+         const overall = 65 + Math.floor(Math.random() * 25); // 65-90
          this.draftClass.push({
              id: `rookie_${Date.now()}_${i}`,
              name: `${firstNames[Math.floor(Math.random()*firstNames.length)]} ${lastNames[Math.floor(Math.random()*lastNames.length)]}`,
              position: pos,
-             rating: rating,
+             overall: overall,
              age: 21 + Math.floor(Math.random()*3)
          });
      }
-     this.draftClass.sort((a,b) => b.rating - a.rating); // Sort by quality for CPU
+     this.draftClass.sort((a,b) => b.overall - a.overall); // Sort by quality for CPU
   }
 
   startDraft() {
@@ -1130,51 +1130,101 @@ export class LeagueEngine {
       // 4. Generate New Schedule
       this.generateSchedule();
       
-      // 5. Progression (Simple)
       // 5. Progression & Retirement
+      const progressionNews = [];
       Object.keys(this.rosters).forEach(teamId => {
           const roster = this.rosters[teamId];
           const kept = [];
-          
+          const coach = this.getCoach(teamId);
+          const devBonus = (coach && coach.bonuses && coach.bonuses.developmentBonus) || 0;
+
           roster.forEach(p => {
               p.age++;
-              
+              const oldOverall = p.overall || 0;
+
               // Retirement Check
               let retireChance = 0;
               if (p.age > 40) retireChance = 1.0;
-              else if (p.age > 35) retireChance = 0.4; // 40% chance if > 35
-              else if (p.age > 32) retireChance = 0.1; // 10% chance if > 32
-              
-              // QBs play longer
-              if (p.position === 'QB') retireChance *= 0.5;
+              else if (p.age > 35) retireChance = 0.4;
+              else if (p.age > 32) retireChance = 0.1;
+
+              // QBs, Ks, Ps play longer
+              if (['QB', 'K', 'P'].includes(p.position)) retireChance *= 0.5;
 
               if (Math.random() < retireChance) {
                   this.addNews(`${p.name} (${p.position}) has retired after ${p.age - 21} seasons.`, 'retire');
               } else {
-                  // Ratings Progression
+                  // Position-adjusted age for progression curve
+                  // QBs/Ks/Ps peak later, RBs peak earlier
+                  let effectiveAge = p.age;
+                  if (['QB', 'K', 'P'].includes(p.position)) effectiveAge -= 2;
+                  else if (p.position === 'RB') effectiveAge += 1;
+
+                  // Base progression by age bracket
                   let change = 0;
-                  if (p.age < 25) change = Math.floor(Math.random() * 5) + 1; // Big jumps for rookies
-                  else if (p.age < 28) change = Math.floor(Math.random() * 3); // Steady
-                  else if (p.age > 31) change = -1 * (Math.floor(Math.random() * 4) + 1); // Decline
-                  
-                  p.overall = Math.max(50, Math.min(99, p.overall + change));
+                  if (effectiveAge < 25) {
+                      change = Math.floor(Math.random() * 4) + 1;       // +1 to +4
+                  } else if (effectiveAge < 28) {
+                      change = Math.floor(Math.random() * 3);           // +0 to +2
+                  } else if (effectiveAge < 31) {
+                      change = Math.floor(Math.random() * 3) - 1;      // -1 to +1
+                  } else if (effectiveAge < 34) {
+                      change = -(Math.floor(Math.random() * 3) + 1);   // -1 to -3
+                  } else {
+                      change = -(Math.floor(Math.random() * 4) + 2);   // -2 to -5
+                  }
+
+                  // Coach development bonus for young players
+                  if (devBonus > 0 && p.age < 26) {
+                      change += Math.floor(Math.random() * (devBonus + 1)); // +0 to +devBonus
+                  }
+
+                  // Performance bonus based on season stats
+                  const stats = this.playerStats[p.id];
+                  if (stats) {
+                      let performed = false;
+                      if (['QB'].includes(p.position) && ((stats.passingYards || 0) > 2000 || (stats.passingTDs || 0) > 15)) performed = true;
+                      if (['RB'].includes(p.position) && ((stats.rushingYards || 0) > 700 || (stats.rushingTDs || 0) > 5)) performed = true;
+                      if (['WR', 'TE'].includes(p.position) && ((stats.receivingYards || 0) > 500 || (stats.receivingTDs || 0) > 4)) performed = true;
+                      if (['DL', 'LB', 'DB', 'CB', 'S'].includes(p.position) && ((stats.tackles || 0) > 40 || (stats.sacks || 0) > 5)) performed = true;
+                      if (performed) change += Math.floor(Math.random() * 2) + 1; // +1 to +2
+                  }
+
+                  p.overall = Math.max(50, Math.min(99, oldOverall + change));
                   kept.push(p);
+
+                  // Track notable changes for news
+                  if (change >= 3) {
+                      progressionNews.push({ name: p.name, pos: p.position, overall: p.overall, change, type: 'improve' });
+                  } else if (change <= -3) {
+                      progressionNews.push({ name: p.name, pos: p.position, overall: p.overall, change, type: 'decline' });
+                  }
               }
           });
-          
+
           this.rosters[teamId] = kept;
-          
+
           // Update Team Ratings based on new roster
           if (kept.length > 0) {
               const totalOvr = kept.reduce((sum, p) => sum + p.overall, 0);
               const avgOvr = Math.round(totalOvr / kept.length);
-              
+
               const team = TEAMS.find(t => t.id === teamId);
               if (team) {
                   team.ratings.overall = avgOvr;
-                  team.ratings.offense = avgOvr; // Simplified
-                  team.ratings.defense = avgOvr; 
+                  team.ratings.offense = avgOvr;
+                  team.ratings.defense = avgOvr;
               }
+          }
+      });
+
+      // Generate news for biggest movers
+      progressionNews.sort((a, b) => Math.abs(b.change) - Math.abs(a.change));
+      progressionNews.slice(0, 8).forEach(item => {
+          if (item.type === 'improve') {
+              this.addNews(`${item.name} (${item.pos}) made a leap to ${item.overall} OVR (+${item.change}) this offseason.`, 'transaction');
+          } else {
+              this.addNews(`${item.name} (${item.pos}) declined to ${item.overall} OVR (${item.change}) this offseason.`, 'transaction');
           }
       });
       

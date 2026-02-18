@@ -52,7 +52,7 @@ export default function DraftScreen({ route, navigation }) {
 
         Alert.alert(
             "Draft Player",
-            `Draft ${player.position} ${player.name} (Rating: ${player.rating})?`,
+            `Draft ${player.position} ${player.name} (Overall: ${player.overall})?`,
             [
                 { text: "Cancel", style: "cancel" },
                 { text: "Draft", onPress: () => {
@@ -87,7 +87,7 @@ export default function DraftScreen({ route, navigation }) {
                 <Text style={styles.pName}>{item.name}</Text>
                 <Text style={styles.pDetails}>{item.position} | Age: {item.age}</Text>
             </View>
-            <Text style={styles.pRating}>{item.rating}</Text>
+            <Text style={styles.pRating}>{item.overall}</Text>
         </TouchableOpacity>
     );
 
