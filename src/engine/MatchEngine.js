@@ -18,21 +18,21 @@ export const DEFENSE_TYPES = {
 
 
 export class MatchEngine {
-  constructor(homeTeam, awayTeam, homeRoster, awayRoster, isPlayoff = false, injuries = {}) {
+  constructor(homeTeam, awayTeam, homeRoster, awayRoster, isPlayoff = false, injuries = {}, homeDepthChart = null, awayDepthChart = null) {
     this.homeTeam = homeTeam;
     this.awayTeam = awayTeam;
     this.isPlayoff = isPlayoff;
-    this.injuries = JSON.parse(JSON.stringify(injuries)); 
+    this.injuries = JSON.parse(JSON.stringify(injuries));
     this.newInjuries = {};
     this.receivedFirstHalf = null;
 
     this.state = {
       quarter: 1,
-      timeRemaining: 900, 
+      timeRemaining: 900,
       down: 1,
       distance: 10,
-      ballOn: 25, 
-      possession: 'home', 
+      ballOn: 25,
+      possession: 'home',
       homeScore: 0,
       awayScore: 0,
       log: [],
@@ -41,9 +41,11 @@ export class MatchEngine {
       pendingEvent: null, // { type: 'AUDIBLE', ... }
     };
 
-    this.playerStats = {}; 
+    this.playerStats = {};
     this.homeRoster = homeRoster || [];
     this.awayRoster = awayRoster || [];
+    this.homeDepthChart = homeDepthChart;
+    this.awayDepthChart = awayDepthChart;
     
     this.performCoinToss();
     
@@ -389,30 +391,74 @@ export class MatchEngine {
   getDefenseTeam() { return this.state.possession === 'home' ? this.awayTeam : this.homeTeam; }
 
   getPlayer(teamType, positionGroup) {
-      // teamType: 'OFF' or 'DEF'
       const team = teamType === 'OFF' ? this.getOffenseTeam() : this.getDefenseTeam();
       const roster = team.id === this.homeTeam.id ? this.homeRoster : this.awayRoster;
+      const depthChart = team.id === this.homeTeam.id ? this.homeDepthChart : this.awayDepthChart;
       if (!roster || roster.length === 0) return { name: 'Player' };
-      
-      // Safety: Ensure we only pick players matching the Team ID (if IDs follow convention)
-      // Convention: teamId_number (e.g. buf_1) OR rookie_...
-      const prefix = team.id.toLowerCase() + '_';
-      const cleanRoster = roster.filter(p => p.id && (p.id.startsWith(prefix) || p.id.startsWith('rookie_')));
-      const pool = (cleanRoster.length > 0 ? cleanRoster : roster).filter(p => !this.isInjured(p.id));
-      
-      // If pool empty, forced to use injured players (desperation)
-      const validRoster = pool.length > 0 ? pool : (cleanRoster.length > 0 ? cleanRoster : roster);
-      
-      let candidates = [];
-      if (positionGroup === 'QB') candidates = validRoster.filter(p => p.position === 'QB');
-      else if (positionGroup === 'RB') candidates = validRoster.filter(p => p.position === 'RB');
-      else if (positionGroup === 'WR') candidates = validRoster.filter(p => p.position === 'WR' || p.position === 'TE');
-      else if (positionGroup === 'DL') candidates = validRoster.filter(p => p.position === 'DL' || p.position === 'LB'); // Front 7
-      else if (positionGroup === 'DB') candidates = validRoster.filter(p => p.position === 'CB' || p.position === 'S'); // Secondary
-      // Fallback
-      if (candidates.length === 0) candidates = validRoster; 
-      
-      return candidates[Math.floor(Math.random() * candidates.length)];
+
+      // Position filters for each group
+      const posFilters = {
+        QB: ['QB'], RB: ['RB'], WR: ['WR', 'TE'], K: ['K', 'P'],
+        DL: ['DL', 'LB'], DB: ['DB', 'CB', 'S'],
+      };
+      const positions = posFilters[positionGroup] || [positionGroup];
+
+      // Build depth-ordered list of healthy players
+      const getOrdered = () => {
+          const ordered = [];
+          if (depthChart) {
+              // Chart keys to pull from for this group
+              const chartKeys = positionGroup === 'WR' ? ['WR', 'TE'] :
+                                positionGroup === 'DL' ? ['DL', 'LB'] :
+                                positionGroup === 'DB' ? ['DB', 'CB', 'S'] :
+                                [positionGroup];
+              chartKeys.forEach(key => {
+                  (depthChart[key] || []).forEach(id => {
+                      const p = roster.find(pl => pl.id === id);
+                      if (p && !this.isInjured(p.id) && !ordered.find(o => o.id === id)) {
+                          ordered.push(p);
+                      }
+                  });
+              });
+          }
+          // Append any roster players at matching positions not yet in ordered list
+          roster.forEach(p => {
+              if (positions.includes(p.position) && !this.isInjured(p.id) && !ordered.find(o => o.id === p.id)) {
+                  ordered.push(p);
+              }
+          });
+          return ordered;
+      };
+
+      const ordered = getOrdered();
+
+      // Fallback: if no healthy candidates, try injured players
+      if (ordered.length === 0) {
+          const fallback = roster.filter(p => positions.includes(p.position));
+          if (fallback.length > 0) return fallback[0];
+          return roster[0] || { name: 'Player' };
+      }
+
+      // Weighted selection based on position group
+      if (positionGroup === 'QB') return ordered[0]; // Always use starter
+
+      if (positionGroup === 'RB') {
+          const r = Math.random();
+          if (ordered.length === 1 || r < 0.70) return ordered[0];
+          if (ordered.length === 2 || r < 0.95) return ordered[1];
+          return ordered[2] || ordered[1];
+      }
+
+      // WR, DL, DB: weighted random from top slots
+      const weights = [0.50, 0.30, 0.15, 0.05];
+      const pool = ordered.slice(0, 4);
+      const totalWeight = weights.slice(0, pool.length).reduce((a, b) => a + b, 0);
+      let rand = Math.random() * totalWeight;
+      for (let i = 0; i < pool.length; i++) {
+          rand -= weights[i];
+          if (rand <= 0) return pool[i];
+      }
+      return pool[pool.length - 1];
   }
 
   recordStat(player, statType, value = 1) {

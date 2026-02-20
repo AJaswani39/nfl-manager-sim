@@ -11,12 +11,14 @@ export default function MatchScreen({ route, navigation }) {
 
   // We keep the engine instance in a ref so it persists across renders without re-initializing
   const engineRef = useRef(new MatchEngine(
-      homeTeam, 
-      awayTeam, 
-      league.rosters[homeId], 
-      league.rosters[awayId], 
-      isPlayoff, 
-      injuries
+      homeTeam,
+      awayTeam,
+      league.rosters[homeId],
+      league.rosters[awayId],
+      isPlayoff,
+      injuries,
+      league.getDepthChart(homeId),
+      league.getDepthChart(awayId)
   ));
   const engine = engineRef.current; // Shorthand
 

@@ -32,6 +32,7 @@ export class LeagueEngine {
     this.salaries = {}; // { playerId: { amount, years } }
     this.teamCaps = {}; // { teamId: { spent, cap } }
     this.franchiseHistory = []; // Array of { season, champion, mvp, ... }
+    this.depthCharts = {}; // { teamId: { position: [playerId, ...] } }
     this.currentWeek = 1;
     this.season = 1;
     this.phase = 'preseason'; // 'preseason', 'regular', 'playoffs', 'offseason'
@@ -39,6 +40,7 @@ export class LeagueEngine {
     this.initializePlayerStats();
     this.initializeCoaches();
     this.initializeSalaries();
+    this.initializeDepthCharts();
   }
 
   initializeStandings() {
@@ -157,6 +159,89 @@ export class LeagueEngine {
       if (this.teamCaps[teamId]) {
         this.teamCaps[teamId].spent = spent;
       }
+    });
+  }
+
+  // DEPTH CHART SYSTEM
+  initializeDepthCharts() {
+    const CHART_POSITIONS = ['QB', 'RB', 'WR', 'TE', 'OL', 'DL', 'LB', 'DB', 'K', 'P'];
+    const rosters = this.rosters || ROSTERS;
+    Object.keys(rosters).forEach(teamId => {
+      this.depthCharts[teamId] = {};
+      CHART_POSITIONS.forEach(pos => {
+        const players = rosters[teamId]
+          .filter(p => p.position === pos)
+          .sort((a, b) => (b.overall || 0) - (a.overall || 0));
+        this.depthCharts[teamId][pos] = players.map(p => p.id);
+      });
+    });
+  }
+
+  ensureDepthChart(teamId) {
+    const CHART_POSITIONS = ['QB', 'RB', 'WR', 'TE', 'OL', 'DL', 'LB', 'DB', 'K', 'P'];
+    if (!this.depthCharts[teamId]) this.depthCharts[teamId] = {};
+
+    const roster = this.rosters[teamId] || [];
+    CHART_POSITIONS.forEach(pos => {
+      const rosterIds = roster.filter(p => p.position === pos).map(p => p.id);
+      const existing = this.depthCharts[teamId][pos] || [];
+      // Keep existing order for players still on roster, append new ones sorted by overall
+      const kept = existing.filter(id => rosterIds.includes(id));
+      const added = rosterIds.filter(id => !kept.includes(id));
+      const addedSorted = roster
+        .filter(p => added.includes(p.id))
+        .sort((a, b) => (b.overall || 0) - (a.overall || 0))
+        .map(p => p.id);
+      this.depthCharts[teamId][pos] = [...kept, ...addedSorted];
+    });
+  }
+
+  getDepthChart(teamId) {
+    if (!this.depthCharts[teamId]) {
+      this.ensureDepthChart(teamId);
+    }
+    return this.depthCharts[teamId];
+  }
+
+  setDepthOrder(teamId, position, orderedPlayerIds) {
+    if (!this.depthCharts[teamId]) this.ensureDepthChart(teamId);
+    const roster = this.rosters[teamId] || [];
+    const validIds = roster.filter(p => p.position === position).map(p => p.id);
+    this.depthCharts[teamId][position] = orderedPlayerIds.filter(id => validIds.includes(id));
+  }
+
+  getDepthOrderedRoster(teamId, position) {
+    this.ensureDepthChart(teamId);
+    const chart = this.depthCharts[teamId][position] || [];
+    const roster = this.rosters[teamId] || [];
+
+    const ordered = [];
+    chart.forEach(id => {
+      const p = roster.find(pl => pl.id === id);
+      if (p) ordered.push(p);
+    });
+    // Append any roster members at this position missing from depth chart
+    roster.forEach(p => {
+      if (p.position === position && !ordered.find(o => o.id === p.id)) {
+        ordered.push(p);
+      }
+    });
+    return ordered;
+  }
+
+  addToDepthChart(teamId, player) {
+    if (!this.depthCharts[teamId]) this.ensureDepthChart(teamId);
+    const pos = player.position;
+    if (!this.depthCharts[teamId][pos]) this.depthCharts[teamId][pos] = [];
+    if (!this.depthCharts[teamId][pos].includes(player.id)) {
+      this.depthCharts[teamId][pos].push(player.id);
+    }
+  }
+
+  removeFromDepthChart(teamId, playerId) {
+    if (!this.depthCharts[teamId]) return;
+    Object.keys(this.depthCharts[teamId]).forEach(pos => {
+      this.depthCharts[teamId][pos] = this.depthCharts[teamId][pos].filter(id => id !== playerId);
     });
   }
 
@@ -569,9 +654,11 @@ export class LeagueEngine {
     const roster = this.rosters[teamId];
     if (!roster) return;
 
-    const qb = roster.find(p => p.position === 'QB');
-    const rbs = roster.filter(p => p.position === 'RB');
-    const wrs = roster.filter(p => p.position === 'WR' || p.position === 'TE');
+    // Use depth chart order: starters get the lion's share
+    const qbs = this.getDepthOrderedRoster(teamId, 'QB');
+    const rbs = this.getDepthOrderedRoster(teamId, 'RB');
+    const wrs = [...this.getDepthOrderedRoster(teamId, 'WR'), ...this.getDepthOrderedRoster(teamId, 'TE')];
+    const qb = qbs[0] || null;
 
     // 1. Determine Touchdowns
     const tds = Math.floor(score / 7);
@@ -587,25 +674,26 @@ export class LeagueEngine {
     const passingYards = Math.floor(totalYards * (0.6 + Math.random() * 0.2));
     const rushingYards = totalYards - passingYards;
 
-    // 3. Assign to Players (Update state)
+    // 3. Assign to Players — starters get majority share
     if (qb) {
       this.ensurePlayerStats(qb.id);
       this.playerStats[qb.id].passingYards += passingYards;
       this.playerStats[qb.id].passingTDs += passingTDs;
     }
 
-    // Randomly distribute rushing yards/TDs among RBs
+    // RB1 gets ~65% of rushing, rest split among backups
     if (rbs.length > 0) {
       let remainingRush = rushingYards;
       let remainingRushTD = rushingTDs;
       rbs.forEach((rb, idx) => {
         this.ensurePlayerStats(rb.id);
         if (idx === rbs.length - 1) {
-          this.playerStats[rb.id].rushingYards += remainingRush;
-          this.playerStats[rb.id].rushingTDs += remainingRushTD;
+          this.playerStats[rb.id].rushingYards += Math.max(0, remainingRush);
+          this.playerStats[rb.id].rushingTDs += Math.max(0, remainingRushTD);
         } else {
-          const share = Math.floor(remainingRush * (0.5 + Math.random() * 0.3));
-          const tdShare = remainingRushTD > 0 && Math.random() > 0.5 ? 1 : 0;
+          const starterShare = idx === 0 ? (0.60 + Math.random() * 0.15) : (0.3 + Math.random() * 0.2);
+          const share = Math.floor(remainingRush * starterShare);
+          const tdShare = remainingRushTD > 0 && (idx === 0 ? Math.random() > 0.3 : Math.random() > 0.6) ? 1 : 0;
           this.playerStats[rb.id].rushingYards += share;
           this.playerStats[rb.id].rushingTDs += tdShare;
           remainingRush -= share;
@@ -614,23 +702,27 @@ export class LeagueEngine {
       });
     }
 
-    // Randomly distribute passing yards/TDs among WRs/TEs
+    // WR1 ~35%, WR2 ~25%, rest split
     if (wrs.length > 0) {
+      const starterShares = [0.35, 0.25];
       let remainingPass = passingYards;
       let remainingPassTD = passingTDs;
       wrs.forEach((wr, idx) => {
         this.ensurePlayerStats(wr.id);
+        let share;
         if (idx === wrs.length - 1) {
-          this.playerStats[wr.id].receivingYards += remainingPass;
-          this.playerStats[wr.id].receivingTDs += remainingPassTD;
+          share = Math.max(0, remainingPass);
+        } else if (idx < starterShares.length) {
+          share = Math.floor(remainingPass * (starterShares[idx] + (Math.random() * 0.1 - 0.05)));
         } else {
-          const share = Math.floor(remainingPass * Math.random());
-          const tdShare = remainingPassTD > 0 && Math.random() > 0.7 ? 1 : 0;
-          this.playerStats[wr.id].receivingYards += share;
-          this.playerStats[wr.id].receivingTDs += tdShare;
-          remainingPass -= share;
-          remainingPassTD -= tdShare;
+          share = Math.floor(remainingPass * Math.random() * 0.3);
         }
+        share = Math.max(0, Math.min(share, remainingPass));
+        const tdShare = remainingPassTD > 0 && (idx === 0 ? Math.random() > 0.4 : Math.random() > 0.7) ? 1 : 0;
+        this.playerStats[wr.id].receivingYards += share;
+        this.playerStats[wr.id].receivingTDs += tdShare;
+        remainingPass -= share;
+        remainingPassTD -= tdShare;
       });
     }
   }
@@ -896,7 +988,7 @@ export class LeagueEngine {
    }
 
   generateDraftClass() {
-     const positions = ['QB', 'RB', 'WR', 'TE', 'OL', 'DL', 'LB', 'CB', 'S'];
+     const positions = ['QB', 'RB', 'WR', 'TE', 'OL', 'DL', 'LB', 'DB'];
      const firstNames = ['DeAndre', 'Marcus', 'Caleb', 'Trevor', 'Kenny', 'Jalen', 'Sauce', 'Tyreek', 'Justin', 'Patrick', 'Joe'];
      const lastNames = ['Smith', 'Johnson', 'Williams', 'Jones', 'Brown', 'Davis', 'Miller', 'Wilson', 'Moore', 'Taylor'];
      
@@ -934,11 +1026,12 @@ export class LeagueEngine {
          }
          
          // CPU Pick: Best available
-         const pick = this.draftClass.shift(); 
+         const pick = this.draftClass.shift();
          if (pick) {
             pick.stats = {}; // Init stats
             if (!this.rosters[teamId]) this.rosters[teamId] = [];
             this.rosters[teamId].push(pick);
+            this.addToDepthChart(teamId, pick);
 
             displayLog.push({ type: 'pick', teamId: teamId, player: pick });
          }
@@ -955,6 +1048,7 @@ export class LeagueEngine {
       pick.stats = {};
       if (!this.rosters[userTeamId]) this.rosters[userTeamId] = [];
       this.rosters[userTeamId].push(pick);
+      this.addToDepthChart(userTeamId, pick);
 
       this.currentPickIndex++; // Move past user
       return pick;
@@ -963,7 +1057,7 @@ export class LeagueEngine {
   // FREE AGENCY LOGIC
   generateFreeAgents() {
     // Generate some random free agents each offseason
-    const positions = ['QB', 'RB', 'WR', 'TE', 'OL', 'DL', 'LB', 'CB', 'S'];
+    const positions = ['QB', 'RB', 'WR', 'TE', 'OL', 'DL', 'LB', 'DB'];
     const firstNames = ['Mike', 'Chris', 'David', 'Tyler', 'Brandon', 'Jason', 'Ryan', 'Kevin', 'Matt', 'Alex'];
     const lastNames = ['Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis', 'Rodriguez', 'Martinez', 'Anderson'];
     
@@ -1012,6 +1106,7 @@ export class LeagueEngine {
       };
     }
     
+    this.addToDepthChart(teamId, player);
     this.addNews(`${player.name} (${player.position}) signed with ${teamId}.`, 'transaction');
     return player;
   }
@@ -1019,14 +1114,15 @@ export class LeagueEngine {
   cutPlayer(teamId, playerId) {
     const roster = this.rosters[teamId];
     if (!roster) return null;
-    
+
     const playerIndex = roster.findIndex(p => p.id === playerId);
     if (playerIndex === -1) return null;
-    
+
     const player = roster.splice(playerIndex, 1)[0];
+    this.removeFromDepthChart(teamId, playerId);
     this.freeAgents.push(player);
     this.freeAgents.sort((a, b) => b.overall - a.overall);
-    
+
     this.addNews(`${player.name} (${player.position}) was released by ${teamId}.`, 'transaction');
     return player;
   }
@@ -1102,6 +1198,10 @@ export class LeagueEngine {
       if (!this.rosters[team1Id]) this.rosters[team1Id] = [];
       this.rosters[team1Id].push(player);
     });
+
+    // Sync depth charts for both teams
+    this.ensureDepthChart(team1Id);
+    this.ensureDepthChart(team2Id);
 
     // Generate news
     const team1 = TEAMS.find(t => t.id === team1Id);
@@ -1230,6 +1330,11 @@ export class LeagueEngine {
           }
       });
       
+      // 6. Sync depth charts (remove retired players, keep user ordering)
+      Object.keys(this.rosters).forEach(teamId => {
+          this.ensureDepthChart(teamId);
+      });
+
       this.generateTransactions();
       this.generateFreeAgents();
   }
@@ -1257,6 +1362,7 @@ export class LeagueEngine {
       franchiseHistory: this.franchiseHistory,
       superBowlWinner: this.superBowlWinner || null,
       awards: this.awards || null,
+      depthCharts: this.depthCharts,
     };
   }
 
@@ -1282,6 +1388,11 @@ export class LeagueEngine {
     this.franchiseHistory = data.franchiseHistory || [];
     this.superBowlWinner = data.superBowlWinner || null;
     this.awards = data.awards || null;
+    this.depthCharts = data.depthCharts || {};
+    // Ensure all teams have depth charts (handles saves from before this feature)
+    Object.keys(this.rosters).forEach(teamId => {
+      if (!this.depthCharts[teamId]) this.ensureDepthChart(teamId);
+    });
     return true;
   }
 
@@ -1314,10 +1425,12 @@ export class LeagueEngine {
     this.salaries = {};
     this.teamCaps = {};
     this.franchiseHistory = [];
+    this.depthCharts = {};
     this.initializeStandings();
     this.initializePlayerStats();
     this.initializeCoaches();
     this.initializeSalaries();
+    this.initializeDepthCharts();
   }
 }
 
