@@ -41,10 +41,17 @@ export class MatchEngine {
       pendingEvent: null, // { type: 'AUDIBLE', ... }
     };
 
-    this.playerStats = {}; 
+    this.playerStats = {};
     this.homeRoster = homeRoster || [];
     this.awayRoster = awayRoster || [];
-    
+
+    // Pre-group players by position role once, instead of filtering on every getPlayer() call.
+    // This turns ~2,500 filter operations per game into ~12 upfront filters + O(1) lookups.
+    this._positionCache = {
+      home: this._buildPositionCache(this.homeRoster, homeTeam.id),
+      away: this._buildPositionCache(this.awayRoster, awayTeam.id),
+    };
+
     this.performCoinToss();
     
     // DEBUG: Verify Rosters
@@ -388,31 +395,34 @@ export class MatchEngine {
   getOffenseTeam() { return this.state.possession === 'home' ? this.homeTeam : this.awayTeam; }
   getDefenseTeam() { return this.state.possession === 'home' ? this.awayTeam : this.homeTeam; }
 
+  _buildPositionCache(roster, teamId) {
+    if (!roster || roster.length === 0) return null;
+    const prefix = teamId.toLowerCase() + '_';
+    const clean = roster.filter(p => p.id && (p.id.startsWith(prefix) || p.id.startsWith('rookie_') || p.id.startsWith('fa_')));
+    const base = clean.length > 0 ? clean : roster;
+    return {
+      all: base,
+      QB: base.filter(p => p.position === 'QB'),
+      RB: base.filter(p => p.position === 'RB'),
+      WR: base.filter(p => p.position === 'WR' || p.position === 'TE'),
+      DL: base.filter(p => p.position === 'DL' || p.position === 'LB'),
+      DB: base.filter(p => p.position === 'CB' || p.position === 'S'),
+    };
+  }
+
   getPlayer(teamType, positionGroup) {
-      // teamType: 'OFF' or 'DEF'
       const team = teamType === 'OFF' ? this.getOffenseTeam() : this.getDefenseTeam();
-      const roster = team.id === this.homeTeam.id ? this.homeRoster : this.awayRoster;
-      if (!roster || roster.length === 0) return { name: 'Player' };
-      
-      // Safety: Ensure we only pick players matching the Team ID (if IDs follow convention)
-      // Convention: teamId_number (e.g. buf_1) OR rookie_...
-      const prefix = team.id.toLowerCase() + '_';
-      const cleanRoster = roster.filter(p => p.id && (p.id.startsWith(prefix) || p.id.startsWith('rookie_')));
-      const pool = (cleanRoster.length > 0 ? cleanRoster : roster).filter(p => !this.isInjured(p.id));
-      
-      // If pool empty, forced to use injured players (desperation)
-      const validRoster = pool.length > 0 ? pool : (cleanRoster.length > 0 ? cleanRoster : roster);
-      
-      let candidates = [];
-      if (positionGroup === 'QB') candidates = validRoster.filter(p => p.position === 'QB');
-      else if (positionGroup === 'RB') candidates = validRoster.filter(p => p.position === 'RB');
-      else if (positionGroup === 'WR') candidates = validRoster.filter(p => p.position === 'WR' || p.position === 'TE');
-      else if (positionGroup === 'DL') candidates = validRoster.filter(p => p.position === 'DL' || p.position === 'LB'); // Front 7
-      else if (positionGroup === 'DB') candidates = validRoster.filter(p => p.position === 'CB' || p.position === 'S'); // Secondary
-      // Fallback
-      if (candidates.length === 0) candidates = validRoster; 
-      
-      return candidates[Math.floor(Math.random() * candidates.length)];
+      const side = team.id === this.homeTeam.id ? 'home' : 'away';
+      const cache = this._positionCache[side];
+      if (!cache) return { name: 'Player' };
+
+      // Pick from pre-grouped cache, filtering only injured players (small set)
+      let candidates = cache[positionGroup] || cache.all;
+      const healthy = candidates.filter(p => !this.isInjured(p.id));
+
+      // Desperation: use injured players if none healthy at position
+      const pool = healthy.length > 0 ? healthy : (candidates.length > 0 ? candidates : cache.all);
+      return pool[Math.floor(Math.random() * pool.length)];
   }
 
   recordStat(player, statType, value = 1) {

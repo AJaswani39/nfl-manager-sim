@@ -35,16 +35,45 @@ export class LeagueEngine {
     this.currentWeek = 1;
     this.season = 1;
     this.phase = 'preseason'; // 'preseason', 'regular', 'playoffs', 'offseason'
+    this.playerIndex = {}; // { playerId: { ...player, teamId } } — O(1) lookup
+    this._standingsDirty = true; // dirty-flag for cached standings
+    this._cachedStandings = null;
     this.initializeStandings();
     this.initializePlayerStats();
     this.initializeCoaches();
     this.initializeSalaries();
+    this.rebuildPlayerIndex();
+  }
+
+  // --- PLAYER INDEX ---
+  // O(1) lookup: playerIndex[playerId] = { ...player, teamId }
+  // Replaces the O(p*t) findPlayer() closures in getLeaderboard/calculateAwards.
+  rebuildPlayerIndex() {
+    this.playerIndex = {};
+    for (const teamId of Object.keys(this.rosters)) {
+      for (const player of this.rosters[teamId]) {
+        this.playerIndex[player.id] = { ...player, teamId };
+      }
+    }
+  }
+
+  _indexAddPlayer(player, teamId) {
+    this.playerIndex[player.id] = { ...player, teamId };
+  }
+
+  _indexRemovePlayer(playerId) {
+    delete this.playerIndex[playerId];
+  }
+
+  findPlayer(playerId) {
+    return this.playerIndex[playerId] || null;
   }
 
   initializeStandings() {
     TEAMS.forEach(team => {
       this.standings[team.id] = { w: 0, l: 0, pf: 0, pa: 0, matches: [] };
     });
+    this._standingsDirty = true;
   }
 
   initializePlayerStats() {
@@ -642,32 +671,29 @@ export class LeagueEngine {
     entry.pa += pointsAgainst;
     if (pointsFor > pointsAgainst) entry.w++;
     else if (pointsFor < pointsAgainst) entry.l++;
+    this._standingsDirty = true;
   }
 
   getStandingsSorted() {
-    return Object.keys(this.standings)
+    if (!this._standingsDirty && this._cachedStandings) {
+      return this._cachedStandings;
+    }
+    this._cachedStandings = Object.keys(this.standings)
       .map(teamId => {
         const team = TEAMS.find(t => t.id === teamId);
         return { ...team, ...this.standings[teamId] };
       })
       .sort((a, b) => b.w - a.w || (b.pf - b.pa) - (a.pf - a.pa));
+    this._standingsDirty = false;
+    return this._cachedStandings;
   }
 
   // LEADERBOARD LOGIC
   getLeaderboard(statKey, limit = 10) {
-    // Find player info from rosters
-    const findPlayer = (playerId) => {
-      for (const teamId of Object.keys(this.rosters)) {
-        const player = this.rosters[teamId].find(p => p.id === playerId);
-        if (player) return { ...player, teamId };
-      }
-      return null;
-    };
-
     return Object.keys(this.playerStats)
       .map(playerId => {
         const stats = this.playerStats[playerId];
-        const player = findPlayer(playerId);
+        const player = this.findPlayer(playerId);
         if (!player) return null;
         return {
           ...player,
@@ -724,21 +750,13 @@ export class LeagueEngine {
   }
 
   calculateAwards() {
-    const findPlayer = (playerId) => {
-      for (const teamId of Object.keys(this.rosters)) {
-        const player = this.rosters[teamId].find(p => p.id === playerId);
-        if (player) return { ...player, teamId };
-      }
-      return null;
-    };
-
     // Calculate scores for all players
     const playerScores = Object.keys(this.playerStats)
       .map(playerId => {
         const stats = this.playerStats[playerId];
-        const player = findPlayer(playerId);
+        const player = this.findPlayer(playerId);
         if (!player) return null;
-        
+
         return {
           ...player,
           stats,
@@ -826,33 +844,52 @@ export class LeagueEngine {
     const teamPlayoffCounts = {};
     TEAMS.forEach(t => teamPlayoffCounts[t.id] = 0);
 
-    // Current State snapshot
-    const currentStandings = JSON.parse(JSON.stringify(this.standings));
-    const startWeek = this.currentWeek;
+    // Snapshot only the fields the simulation actually uses (w, l)
+    // Avoids 50x JSON.parse(JSON.stringify()) of the full standings with match arrays
+    const baseWins = {};
+    const baseLosses = {};
+    for (const teamId of Object.keys(this.standings)) {
+      baseWins[teamId] = this.standings[teamId].w;
+      baseLosses[teamId] = this.standings[teamId].l;
+    }
 
-    for (let sim = 0; sim < SIMULATIONS; sim++) {
-      // 1. Clone Standings
-      const simStandings = JSON.parse(JSON.stringify(currentStandings));
-      
-      // 2. Simulate Remaining Games
-      for (let w = startWeek; w <= 17; w++) {
-        const weekMatches = this.weeks[w-1];
-        weekMatches.forEach(match => {
-           // Quick sim: 50/50 + rating bias
-           const homeAdv = match.home.ratings.overall > match.away.ratings.overall ? 0.6 : 0.4;
-           const homeWins = Math.random() < homeAdv;
-           const winnerId = homeWins ? match.home.id : match.away.id;
-           simStandings[winnerId].w++; 
+    // Pre-collect remaining matches once instead of re-reading this.weeks per sim
+    const startWeek = this.currentWeek;
+    const remainingMatches = [];
+    for (let w = startWeek; w <= 17; w++) {
+      const weekMatches = this.weeks[w - 1];
+      if (!weekMatches) continue;
+      for (const match of weekMatches) {
+        remainingMatches.push({
+          homeId: match.home.id,
+          awayId: match.away.id,
+          homeAdv: match.home.ratings.overall > match.away.ratings.overall ? 0.6 : 0.4,
         });
       }
+    }
 
-      // 3. Determine Seeds for this Sim
-      // (Simplified: Just take top 7 per conference by Wins)
-      const allTeams = TEAMS.map(t => ({...t, w: simStandings[t.id].w}));
-      const afc = allTeams.filter(t => t.conference === 'AFC').sort((a, b) => b.w - a.w).slice(0, 7);
-      const nfc = allTeams.filter(t => t.conference === 'NFC').sort((a, b) => b.w - a.w).slice(0, 7);
-      
-      [...afc, ...nfc].forEach(t => teamPlayoffCounts[t.id]++);
+    // Pre-split TEAMS by conference once
+    const afcTeams = TEAMS.filter(t => t.conference === 'AFC');
+    const nfcTeams = TEAMS.filter(t => t.conference === 'NFC');
+
+    for (let sim = 0; sim < SIMULATIONS; sim++) {
+      // Shallow-copy only wins per team (2 integer copies × 32 teams)
+      const simWins = { ...baseWins };
+
+      // Simulate remaining games
+      for (const m of remainingMatches) {
+        const winnerId = Math.random() < m.homeAdv ? m.homeId : m.awayId;
+        simWins[winnerId]++;
+      }
+
+      // Determine top 7 per conference by wins
+      const afcSorted = afcTeams.map(t => ({ id: t.id, w: simWins[t.id] }))
+        .sort((a, b) => b.w - a.w);
+      const nfcSorted = nfcTeams.map(t => ({ id: t.id, w: simWins[t.id] }))
+        .sort((a, b) => b.w - a.w);
+
+      for (let i = 0; i < 7 && i < afcSorted.length; i++) teamPlayoffCounts[afcSorted[i].id]++;
+      for (let i = 0; i < 7 && i < nfcSorted.length; i++) teamPlayoffCounts[nfcSorted[i].id]++;
     }
 
     // Convert to Percentages
@@ -934,11 +971,12 @@ export class LeagueEngine {
          }
          
          // CPU Pick: Best available
-         const pick = this.draftClass.shift(); 
+         const pick = this.draftClass.shift();
          if (pick) {
             pick.stats = {}; // Init stats
             if (!this.rosters[teamId]) this.rosters[teamId] = [];
             this.rosters[teamId].push(pick);
+            this._indexAddPlayer(pick, teamId);
 
             displayLog.push({ type: 'pick', teamId: teamId, player: pick });
          }
@@ -955,6 +993,7 @@ export class LeagueEngine {
       pick.stats = {};
       if (!this.rosters[userTeamId]) this.rosters[userTeamId] = [];
       this.rosters[userTeamId].push(pick);
+      this._indexAddPlayer(pick, userTeamId);
 
       this.currentPickIndex++; // Move past user
       return pick;
@@ -1001,7 +1040,8 @@ export class LeagueEngine {
     
     if (!this.rosters[teamId]) this.rosters[teamId] = [];
     this.rosters[teamId].push(player);
-    
+    this._indexAddPlayer(player, teamId);
+
     // Initialize stats
     if (!this.playerStats[player.id]) {
       this.playerStats[player.id] = {
@@ -1011,7 +1051,7 @@ export class LeagueEngine {
         tackles: 0, sacks: 0, interceptions: 0
       };
     }
-    
+
     this.addNews(`${player.name} (${player.position}) signed with ${teamId}.`, 'transaction');
     return player;
   }
@@ -1024,9 +1064,10 @@ export class LeagueEngine {
     if (playerIndex === -1) return null;
     
     const player = roster.splice(playerIndex, 1)[0];
+    this._indexRemovePlayer(player.id);
     this.freeAgents.push(player);
     this.freeAgents.sort((a, b) => b.overall - a.overall);
-    
+
     this.addNews(`${player.name} (${player.position}) was released by ${teamId}.`, 'transaction');
     return player;
   }
@@ -1090,6 +1131,7 @@ export class LeagueEngine {
       const player = roster.splice(idx, 1)[0];
       if (!this.rosters[team2Id]) this.rosters[team2Id] = [];
       this.rosters[team2Id].push(player);
+      this._indexAddPlayer(player, team2Id);
     });
 
     // Move players2 from team2 to team1
@@ -1101,6 +1143,7 @@ export class LeagueEngine {
       const player = roster.splice(idx, 1)[0];
       if (!this.rosters[team1Id]) this.rosters[team1Id] = [];
       this.rosters[team1Id].push(player);
+      this._indexAddPlayer(player, team1Id);
     });
 
     // Generate news
@@ -1132,13 +1175,18 @@ export class LeagueEngine {
       // 4. Generate New Schedule
       this.generateSchedule();
       
-      // 5. Progression & Retirement
+      // 5. Progression, Retirement & Team Rating Update — single pass per team
+      // Build teamById lookup to avoid TEAMS.find() O(32) per team inside loop
+      const teamById = {};
+      TEAMS.forEach(t => { teamById[t.id] = t; });
+
       const progressionNews = [];
       Object.keys(this.rosters).forEach(teamId => {
           const roster = this.rosters[teamId];
           const kept = [];
           const coach = this.getCoach(teamId);
           const devBonus = (coach && coach.bonuses && coach.bonuses.developmentBonus) || 0;
+          let totalOvr = 0;
 
           roster.forEach(p => {
               p.age++;
@@ -1156,32 +1204,27 @@ export class LeagueEngine {
               if (Math.random() < retireChance) {
                   this.addNews(`${p.name} (${p.position}) has retired after ${p.age - 21} seasons.`, 'retire');
               } else {
-                  // Position-adjusted age for progression curve
-                  // QBs/Ks/Ps peak later, RBs peak earlier
                   let effectiveAge = p.age;
                   if (['QB', 'K', 'P'].includes(p.position)) effectiveAge -= 2;
                   else if (p.position === 'RB') effectiveAge += 1;
 
-                  // Base progression by age bracket
                   let change = 0;
                   if (effectiveAge < 25) {
-                      change = Math.floor(Math.random() * 4) + 1;       // +1 to +4
+                      change = Math.floor(Math.random() * 4) + 1;
                   } else if (effectiveAge < 28) {
-                      change = Math.floor(Math.random() * 3);           // +0 to +2
+                      change = Math.floor(Math.random() * 3);
                   } else if (effectiveAge < 31) {
-                      change = Math.floor(Math.random() * 3) - 1;      // -1 to +1
+                      change = Math.floor(Math.random() * 3) - 1;
                   } else if (effectiveAge < 34) {
-                      change = -(Math.floor(Math.random() * 3) + 1);   // -1 to -3
+                      change = -(Math.floor(Math.random() * 3) + 1);
                   } else {
-                      change = -(Math.floor(Math.random() * 4) + 2);   // -2 to -5
+                      change = -(Math.floor(Math.random() * 4) + 2);
                   }
 
-                  // Coach development bonus for young players
                   if (devBonus > 0 && p.age < 26) {
-                      change += Math.floor(Math.random() * (devBonus + 1)); // +0 to +devBonus
+                      change += Math.floor(Math.random() * (devBonus + 1));
                   }
 
-                  // Performance bonus based on season stats
                   const stats = this.playerStats[p.id];
                   if (stats) {
                       let performed = false;
@@ -1189,13 +1232,13 @@ export class LeagueEngine {
                       if (['RB'].includes(p.position) && ((stats.rushingYards || 0) > 700 || (stats.rushingTDs || 0) > 5)) performed = true;
                       if (['WR', 'TE'].includes(p.position) && ((stats.receivingYards || 0) > 500 || (stats.receivingTDs || 0) > 4)) performed = true;
                       if (['DL', 'LB', 'DB', 'CB', 'S'].includes(p.position) && ((stats.tackles || 0) > 40 || (stats.sacks || 0) > 5)) performed = true;
-                      if (performed) change += Math.floor(Math.random() * 2) + 1; // +1 to +2
+                      if (performed) change += Math.floor(Math.random() * 2) + 1;
                   }
 
                   p.overall = Math.max(50, Math.min(99, oldOverall + change));
                   kept.push(p);
+                  totalOvr += p.overall; // accumulate in same pass
 
-                  // Track notable changes for news
                   if (change >= 3) {
                       progressionNews.push({ name: p.name, pos: p.position, overall: p.overall, change, type: 'improve' });
                   } else if (change <= -3) {
@@ -1206,12 +1249,10 @@ export class LeagueEngine {
 
           this.rosters[teamId] = kept;
 
-          // Update Team Ratings based on new roster
+          // Update Team Ratings in same pass — O(1) lookup via teamById
           if (kept.length > 0) {
-              const totalOvr = kept.reduce((sum, p) => sum + p.overall, 0);
               const avgOvr = Math.round(totalOvr / kept.length);
-
-              const team = TEAMS.find(t => t.id === teamId);
+              const team = teamById[teamId];
               if (team) {
                   team.ratings.overall = avgOvr;
                   team.ratings.offense = avgOvr;
@@ -1229,9 +1270,12 @@ export class LeagueEngine {
               this.addNews(`${item.name} (${item.pos}) declined to ${item.overall} OVR (${item.change}) this offseason.`, 'transaction');
           }
       });
-      
+
       this.generateTransactions();
       this.generateFreeAgents();
+
+      // Rebuild player index after roster mutations (retirements, progressions)
+      this.rebuildPlayerIndex();
   }
 
   // SAVE/LOAD GAME
@@ -1282,6 +1326,9 @@ export class LeagueEngine {
     this.franchiseHistory = data.franchiseHistory || [];
     this.superBowlWinner = data.superBowlWinner || null;
     this.awards = data.awards || null;
+    this._standingsDirty = true;
+    this._cachedStandings = null;
+    this.rebuildPlayerIndex();
     return true;
   }
 
@@ -1314,10 +1361,13 @@ export class LeagueEngine {
     this.salaries = {};
     this.teamCaps = {};
     this.franchiseHistory = [];
+    this._standingsDirty = true;
+    this._cachedStandings = null;
     this.initializeStandings();
     this.initializePlayerStats();
     this.initializeCoaches();
     this.initializeSalaries();
+    this.rebuildPlayerIndex();
   }
 }
 
