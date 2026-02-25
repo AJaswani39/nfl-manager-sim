@@ -18,7 +18,9 @@ export default function MatchScreen({ route, navigation }) {
       isPlayoff,
       injuries,
       league.getDepthChart(homeId),
-      league.getDepthChart(awayId)
+      league.getDepthChart(awayId),
+      league.getGamePlan(homeId),
+      league.getGamePlan(awayId)
   ));
   const engine = engineRef.current; // Shorthand
 
@@ -59,17 +61,13 @@ export default function MatchScreen({ route, navigation }) {
     const isUserOff = isUserHome ? engine.state.possession === 'home' : engine.state.possession === 'away';
     
     if (!isUserOff) {
-        // AI is Offense
-        const roll = Math.random();
-        if (roll < 0.4) aiChoice = PLAY_TYPES.RUN_INSIDE;
-        else if (roll < 0.7) aiChoice = PLAY_TYPES.PASS_SHORT;
-        else aiChoice = PLAY_TYPES.PASS_DEEP;
+        // AI is Offense — use game plan weights
+        const aiSide = isUserHome ? 'away' : 'home';
+        aiChoice = engine.chooseAIOffensePlay(aiSide);
     } else {
-        // AI is Defense
-        const roll = Math.random();
-        if (roll < 0.4) aiChoice = DEFENSE_TYPES.RUN_DEFENSE;
-        else if (roll < 0.8) aiChoice = DEFENSE_TYPES.PASS_COVERAGE;
-        else aiChoice = DEFENSE_TYPES.BLITZ;
+        // AI is Defense — use game plan weights
+        const aiSide = isUserHome ? 'away' : 'home';
+        aiChoice = engine.chooseAIDefensePlay(aiSide);
     }
 
     // 2. CHECK FOR RANDOM EVENTS INTERRUPTIONS

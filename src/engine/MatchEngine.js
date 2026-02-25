@@ -18,7 +18,7 @@ export const DEFENSE_TYPES = {
 
 
 export class MatchEngine {
-  constructor(homeTeam, awayTeam, homeRoster, awayRoster, isPlayoff = false, injuries = {}, homeDepthChart = null, awayDepthChart = null) {
+  constructor(homeTeam, awayTeam, homeRoster, awayRoster, isPlayoff = false, injuries = {}, homeDepthChart = null, awayDepthChart = null, homeGamePlan = null, awayGamePlan = null) {
     this.homeTeam = homeTeam;
     this.awayTeam = awayTeam;
     this.isPlayoff = isPlayoff;
@@ -44,6 +44,10 @@ export class MatchEngine {
     this.playerStats = {};
     this.homeRoster = homeRoster || [];
     this.awayRoster = awayRoster || [];
+    this.homeDepthChart = homeDepthChart;
+    this.awayDepthChart = awayDepthChart;
+    this.homeGamePlan = homeGamePlan;
+    this.awayGamePlan = awayGamePlan;
 
     // Pre-group players by position role once, instead of filtering on every getPlayer() call.
     // This turns ~2,500 filter operations per game into ~12 upfront filters + O(1) lookups.
@@ -406,22 +410,127 @@ export class MatchEngine {
       RB: base.filter(p => p.position === 'RB'),
       WR: base.filter(p => p.position === 'WR' || p.position === 'TE'),
       DL: base.filter(p => p.position === 'DL' || p.position === 'LB'),
-      DB: base.filter(p => p.position === 'CB' || p.position === 'S'),
+      DB: base.filter(p => p.position === 'DB' || p.position === 'CB' || p.position === 'S'),
     };
+  }
+
+  chooseAIOffensePlay(side) {
+    const plan = side === 'home' ? this.homeGamePlan : this.awayGamePlan;
+    const w = plan?.offense || null;
+    // Default weights if no game plan
+    const weights = w ? {
+      run_heavy:  { run: 0.55, shortPass: 0.25, deepPass: 0.10, screen: 0.05, playAction: 0.03, draw: 0.02 },
+      balanced:   { run: 0.35, shortPass: 0.30, deepPass: 0.15, screen: 0.08, playAction: 0.07, draw: 0.05 },
+      pass_heavy: { run: 0.15, shortPass: 0.35, deepPass: 0.25, screen: 0.12, playAction: 0.08, draw: 0.05 },
+      spread:     { run: 0.20, shortPass: 0.25, deepPass: 0.20, screen: 0.15, playAction: 0.12, draw: 0.08 },
+    }[w] : null;
+
+    if (!weights) {
+      // Fallback: old hardcoded distribution
+      const roll = Math.random();
+      if (roll < 0.4) return PLAY_TYPES.RUN_INSIDE;
+      if (roll < 0.7) return PLAY_TYPES.PASS_SHORT;
+      return PLAY_TYPES.PASS_DEEP;
+    }
+
+    const roll = Math.random();
+    let cumulative = 0;
+    cumulative += weights.run;
+    if (roll < cumulative) return Math.random() < 0.6 ? PLAY_TYPES.RUN_INSIDE : PLAY_TYPES.RUN_OUTSIDE;
+    cumulative += weights.shortPass;
+    if (roll < cumulative) return PLAY_TYPES.PASS_SHORT;
+    cumulative += weights.deepPass;
+    if (roll < cumulative) return PLAY_TYPES.PASS_DEEP;
+    cumulative += weights.screen;
+    if (roll < cumulative) return PLAY_TYPES.PASS_SCREEN;
+    cumulative += weights.playAction;
+    if (roll < cumulative) return PLAY_TYPES.PASS_PLAY_ACTION;
+    return PLAY_TYPES.RUN_DRAW;
+  }
+
+  chooseAIDefensePlay(side) {
+    const plan = side === 'home' ? this.homeGamePlan : this.awayGamePlan;
+    const w = plan?.defense || null;
+    const weights = w ? {
+      aggressive:   { runDef: 0.30, coverage: 0.35, blitz: 0.35 },
+      balanced:     { runDef: 0.35, coverage: 0.40, blitz: 0.25 },
+      conservative: { runDef: 0.40, coverage: 0.45, blitz: 0.15 },
+      blitz_heavy:  { runDef: 0.20, coverage: 0.35, blitz: 0.45 },
+    }[w] : null;
+
+    if (!weights) {
+      const roll = Math.random();
+      if (roll < 0.4) return DEFENSE_TYPES.RUN_DEFENSE;
+      if (roll < 0.8) return DEFENSE_TYPES.PASS_COVERAGE;
+      return DEFENSE_TYPES.BLITZ;
+    }
+
+    const roll = Math.random();
+    let cumulative = 0;
+    cumulative += weights.runDef;
+    if (roll < cumulative) return DEFENSE_TYPES.RUN_DEFENSE;
+    cumulative += weights.coverage;
+    if (roll < cumulative) return DEFENSE_TYPES.PASS_COVERAGE;
+    return DEFENSE_TYPES.BLITZ;
   }
 
   getPlayer(teamType, positionGroup) {
       const team = teamType === 'OFF' ? this.getOffenseTeam() : this.getDefenseTeam();
-      const side = team.id === this.homeTeam.id ? 'home' : 'away';
+      const isHome = team.id === this.homeTeam.id;
+      const side = isHome ? 'home' : 'away';
       const cache = this._positionCache[side];
+      const depthChart = isHome ? this.homeDepthChart : this.awayDepthChart;
       if (!cache) return { name: 'Player' };
 
-      // Pick from pre-grouped cache, filtering only injured players (small set)
-      let candidates = cache[positionGroup] || cache.all;
+      // Pick from pre-grouped cache, filtering out injured players
+      const candidates = cache[positionGroup] || cache.all;
       const healthy = candidates.filter(p => !this.isInjured(p.id));
-
-      // Desperation: use injured players if none healthy at position
       const pool = healthy.length > 0 ? healthy : (candidates.length > 0 ? candidates : cache.all);
+
+      if (pool.length === 0) return { name: 'Player' };
+
+      // If we have a depth chart, build an ordered list for weighted selection
+      if (depthChart) {
+          const chartKeys = positionGroup === 'WR' ? ['WR', 'TE'] :
+                            positionGroup === 'DL' ? ['DL', 'LB'] :
+                            positionGroup === 'DB' ? ['DB', 'CB', 'S'] :
+                            [positionGroup];
+
+          const ordered = [];
+          chartKeys.forEach(key => {
+              (depthChart[key] || []).forEach(id => {
+                  const p = pool.find(pl => pl.id === id);
+                  if (p && !ordered.find(o => o.id === id)) ordered.push(p);
+              });
+          });
+          // Append any healthy pool members not in the depth chart
+          pool.forEach(p => { if (!ordered.find(o => o.id === p.id)) ordered.push(p); });
+
+          if (ordered.length === 0) return pool[Math.floor(Math.random() * pool.length)];
+
+          // QB: always use starter
+          if (positionGroup === 'QB') return ordered[0];
+
+          // RB: starter ~70%, backup ~25%, third ~5%
+          if (positionGroup === 'RB') {
+              const r = Math.random();
+              if (ordered.length === 1 || r < 0.70) return ordered[0];
+              if (ordered.length === 2 || r < 0.95) return ordered[1];
+              return ordered[2] || ordered[1];
+          }
+
+          // WR / DL / DB: weighted 50/30/15/5 across top 4
+          const weights = [0.50, 0.30, 0.15, 0.05];
+          const top = ordered.slice(0, 4);
+          let rand = Math.random() * weights.slice(0, top.length).reduce((a, b) => a + b, 0);
+          for (let i = 0; i < top.length; i++) {
+              rand -= weights[i];
+              if (rand <= 0) return top[i];
+          }
+          return top[top.length - 1];
+      }
+
+      // No depth chart — pure random from healthy pool
       return pool[Math.floor(Math.random() * pool.length)];
   }
 

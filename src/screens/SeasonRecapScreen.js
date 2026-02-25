@@ -14,8 +14,8 @@ export default function SeasonRecapScreen({ route }) {
   const userRecord = league.standings[userTeamId];
   const awards = league.getAwards();
 
-  // Get champion (1st in standings or last playoff winner)
-  const champion = standings[0];
+  // Get champion — prefer actual Super Bowl winner over best regular-season record
+  const champion = league.superBowlWinner || standings[0];
 
   // Get user's best player
   const getUserBestPlayer = () => {

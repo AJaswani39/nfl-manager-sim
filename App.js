@@ -24,6 +24,11 @@ import SalaryCapScreen from './src/screens/SalaryCapScreen';
 import RosterScreen from './src/screens/RosterScreen';
 import ScheduleScreen from './src/screens/ScheduleScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
+import PlayoffBracketScreen from './src/screens/PlayoffBracketScreen';
+import GamePlanScreen from './src/screens/GamePlanScreen';
+import InjuryReportScreen from './src/screens/InjuryReportScreen';
+import TeamStatsScreen from './src/screens/TeamStatsScreen';
+import ContractScreen from './src/screens/ContractScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -137,6 +142,31 @@ export default function App() {
           <Stack.Screen
             name="Settings"
             component={withErrorBoundary(SettingsScreen)}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="PlayoffBracket"
+            component={withErrorBoundary(PlayoffBracketScreen)}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="GamePlan"
+            component={withErrorBoundary(GamePlanScreen)}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="InjuryReport"
+            component={withErrorBoundary(InjuryReportScreen)}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="TeamStats"
+            component={withErrorBoundary(TeamStatsScreen)}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="Contracts"
+            component={withErrorBoundary(ContractScreen)}
             options={{ headerShown: false }}
           />
           <Stack.Screen

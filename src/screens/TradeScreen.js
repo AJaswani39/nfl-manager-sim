@@ -15,6 +15,9 @@ export default function TradeScreen({ route }) {
   const [requestedPlayers, setRequestedPlayers] = useState([]);
   const [tradeResult, setTradeResult] = useState(null);
 
+  const tradeWindowOpen = league.isTradeWindowOpen();
+  const deadlineInfo = league.getTradeDeadlineInfo();
+
   const otherTeams = TEAMS.filter(t => t.id !== userTeamId);
   const userRoster = league.rosters[userTeamId] || [];
   const partnerRoster = selectedPartner ? (league.rosters[selectedPartner] || []) : [];
@@ -108,8 +111,23 @@ export default function TradeScreen({ route }) {
         <View style={styles.placeholder} />
       </View>
 
+      {/* Trade Deadline Banner */}
+      {!tradeWindowOpen && (
+        <View style={{backgroundColor:'#d32f2f', padding:14, alignItems:'center'}}>
+          <Text style={{color:'#fff', fontWeight:'900', fontSize:16, letterSpacing:1}}>TRADE DEADLINE HAS PASSED</Text>
+          <Text style={{color:'rgba(255,255,255,0.8)', fontSize:12, marginTop:4}}>Trades are no longer available this season</Text>
+        </View>
+      )}
+      {tradeWindowOpen && deadlineInfo && !deadlineInfo.passed && deadlineInfo.weeksUntil <= 3 && (
+        <View style={{backgroundColor:'#f57f17', padding:10, alignItems:'center'}}>
+          <Text style={{color:'#fff', fontWeight:'bold', fontSize:13}}>
+            Trade deadline in {deadlineInfo.weeksUntil} week{deadlineInfo.weeksUntil !== 1 ? 's' : ''}!
+          </Text>
+        </View>
+      )}
+
       {/* Team Selector */}
-      <View style={styles.teamSelector}>
+      <View style={[styles.teamSelector, !tradeWindowOpen && {opacity: 0.4}]} pointerEvents={tradeWindowOpen ? 'auto' : 'none'}>
         <Text style={styles.sectionLabel}>Select Trade Partner:</Text>
         <FlatList
           horizontal
@@ -150,7 +168,7 @@ export default function TradeScreen({ route }) {
       </View>
 
       {/* Trade Evaluation */}
-      <View style={styles.evaluationSection}>
+      <View style={[styles.evaluationSection, !tradeWindowOpen && {opacity: 0.4}]} pointerEvents={tradeWindowOpen ? 'auto' : 'none'}>
         {tradeResult && (
           <View style={[styles.resultBox, tradeResult.willAccept ? styles.resultAccepted : styles.resultRejected]}>
             <Text style={styles.resultText}>{tradeResult.message}</Text>

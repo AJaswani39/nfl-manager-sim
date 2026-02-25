@@ -184,7 +184,7 @@ export default function SeasonScreen({ route, navigation }) {
                 <Text style={{color:'#007AFF', fontSize: 20}}>→</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity 
+            <TouchableOpacity
               style={{flexDirection:'row', alignItems:'center', justifyContent:'space-between', padding:10, backgroundColor:'#1e1e1e', borderRadius:8, marginBottom:16, borderLeftWidth: 4, borderColor: '#fdd835'}}
               onPress={() => navigation.navigate('Leaderboard')}
             >
@@ -195,7 +195,18 @@ export default function SeasonScreen({ route, navigation }) {
                 <Text style={{color:'#fdd835', fontSize: 20}}>→</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity 
+            <TouchableOpacity
+              style={{flexDirection:'row', alignItems:'center', justifyContent:'space-between', padding:10, backgroundColor:'#1e1e1e', borderRadius:8, marginBottom:16, borderLeftWidth: 4, borderColor: '#ab47bc'}}
+              onPress={() => navigation.navigate('TeamStats', { userTeamId })}
+            >
+                <View>
+                    <Text style={{color:'#fff', fontWeight:'bold', fontSize: 16}}>📊 TEAM STATS</Text>
+                    <Text style={{color:'#888', fontSize:12}}>Your team's season performance</Text>
+                </View>
+                <Text style={{color:'#ab47bc', fontSize: 20}}>→</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
               style={{flexDirection:'row', alignItems:'center', justifyContent:'space-between', padding:10, backgroundColor:'#1e1e1e', borderRadius:8, marginBottom:16, borderLeftWidth: 4, borderColor: '#9c27b0'}}
               onPress={() => navigation.navigate('Awards')}
             >
@@ -217,7 +228,18 @@ export default function SeasonScreen({ route, navigation }) {
                 <Text style={{color:'#00bcd4', fontSize: 20}}>→</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity 
+            <TouchableOpacity
+              style={{flexDirection:'row', alignItems:'center', justifyContent:'space-between', padding:10, backgroundColor:'#1e1e1e', borderRadius:8, marginBottom:16, borderLeftWidth: 4, borderColor: '#ef5350'}}
+              onPress={() => navigation.navigate('InjuryReport', { userTeamId })}
+            >
+                <View>
+                    <Text style={{color:'#fff', fontWeight:'bold', fontSize: 16}}>🏥 INJURY REPORT</Text>
+                    <Text style={{color:'#888', fontSize:12}}>Player injuries & recovery</Text>
+                </View>
+                <Text style={{color:'#ef5350', fontSize: 20}}>→</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
               style={{flexDirection:'row', alignItems:'center', justifyContent:'space-between', padding:10, backgroundColor:'#1e1e1e', borderRadius:8, marginBottom:16, borderLeftWidth: 4, borderColor: '#4caf50'}}
               onPress={() => navigation.navigate('FreeAgency', { userTeamId })}
             >
@@ -239,7 +261,7 @@ export default function SeasonScreen({ route, navigation }) {
                 <Text style={{color:'#f44336', fontSize: 20}}>→</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity 
+            <TouchableOpacity
               style={{flexDirection:'row', alignItems:'center', justifyContent:'space-between', padding:10, backgroundColor:'#1e1e1e', borderRadius:8, marginBottom:16, borderLeftWidth: 4, borderColor: '#ff9800'}}
               onPress={() => navigation.navigate('Coach', { userTeamId })}
             >
@@ -248,6 +270,17 @@ export default function SeasonScreen({ route, navigation }) {
                     <Text style={{color:'#888', fontSize:12}}>Change your coaching style</Text>
                 </View>
                 <Text style={{color:'#ff9800', fontSize: 20}}>→</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={{flexDirection:'row', alignItems:'center', justifyContent:'space-between', padding:10, backgroundColor:'#1e1e1e', borderRadius:8, marginBottom:16, borderLeftWidth: 4, borderColor: '#00e676'}}
+              onPress={() => navigation.navigate('GamePlan', { userTeamId })}
+            >
+                <View>
+                    <Text style={{color:'#fff', fontWeight:'bold', fontSize: 16}}>📋 GAME PLAN</Text>
+                    <Text style={{color:'#888', fontSize:12}}>Set offensive & defensive strategy</Text>
+                </View>
+                <Text style={{color:'#00e676', fontSize: 20}}>→</Text>
             </TouchableOpacity>
 
             <TouchableOpacity 
@@ -261,7 +294,7 @@ export default function SeasonScreen({ route, navigation }) {
                 <Text style={{color:'#e91e63', fontSize: 20}}>→</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity 
+            <TouchableOpacity
               style={{flexDirection:'row', alignItems:'center', justifyContent:'space-between', padding:10, backgroundColor:'#1e1e1e', borderRadius:8, marginBottom:16, borderLeftWidth: 4, borderColor: '#8bc34a'}}
               onPress={() => navigation.navigate('SalaryCap', { userTeamId })}
             >
@@ -272,7 +305,18 @@ export default function SeasonScreen({ route, navigation }) {
                 <Text style={{color:'#8bc34a', fontSize: 20}}>→</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity 
+            <TouchableOpacity
+              style={{flexDirection:'row', alignItems:'center', justifyContent:'space-between', padding:10, backgroundColor:'#1e1e1e', borderRadius:8, marginBottom:16, borderLeftWidth: 4, borderColor: '#26c6da'}}
+              onPress={() => navigation.navigate('Contracts', { userTeamId })}
+            >
+                <View>
+                    <Text style={{color:'#fff', fontWeight:'bold', fontSize: 16}}>📝 CONTRACTS</Text>
+                    <Text style={{color:'#888', fontSize:12}}>Extend expiring player contracts</Text>
+                </View>
+                <Text style={{color:'#26c6da', fontSize: 20}}>→</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
               style={{flexDirection:'row', alignItems:'center', justifyContent:'space-between', padding:10, backgroundColor:'#1e1e1e', borderRadius:8, marginBottom:16, borderLeftWidth: 4, borderColor: '#03a9f4'}}
               onPress={() => navigation.navigate('Roster', { userTeamId })}
             >
@@ -418,6 +462,22 @@ export default function SeasonScreen({ route, navigation }) {
                   </View>
                 )
              })}
+          </View>
+        )}
+
+        {/* PLAYOFF BRACKET BUTTON */}
+        {league.phase === 'playoffs' && (
+          <View style={{marginHorizontal: 16, marginBottom: 8}}>
+            <TouchableOpacity
+              style={{flexDirection:'row', alignItems:'center', justifyContent:'space-between', padding:14, backgroundColor:'#1a1a0a', borderRadius:12, borderWidth:2, borderColor:'#fdd835'}}
+              onPress={() => navigation.navigate('PlayoffBracket')}
+            >
+              <View>
+                <Text style={{color:'#fdd835', fontWeight:'900', fontSize: 17, letterSpacing: 1}}>PLAYOFF BRACKET</Text>
+                <Text style={{color:'#888', fontSize:12, marginTop:2}}>View full bracket & results</Text>
+              </View>
+              <Text style={{color:'#fdd835', fontSize: 22}}>→</Text>
+            </TouchableOpacity>
           </View>
         )}
 
