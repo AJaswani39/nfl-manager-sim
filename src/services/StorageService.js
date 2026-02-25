@@ -38,9 +38,15 @@ export const StorageService = {
     try {
       const legacyRaw = await AsyncStorage.getItem(LEGACY_KEY);
       if (legacyRaw !== null) {
-        const data = JSON.parse(legacyRaw);
-        index.slots[1] = buildSlotMeta(1, data);
-        await AsyncStorage.setItem(slotKey(1), legacyRaw);
+        try {
+          const data = JSON.parse(legacyRaw);
+          // Write slot data first; only update index meta if this succeeds
+          await AsyncStorage.setItem(slotKey(1), legacyRaw);
+          index.slots[1] = buildSlotMeta(1, data);
+        } catch (parseOrWriteError) {
+          console.error('Error migrating legacy save:', parseOrWriteError);
+          // index.slots[1] stays null — migration skipped, legacy key preserved
+        }
       }
       await AsyncStorage.setItem(INDEX_KEY, JSON.stringify(index));
     } catch (error) {
@@ -52,7 +58,14 @@ export const StorageService = {
   async saveSlot(slotId, leagueData) {
     try {
       await AsyncStorage.setItem(slotKey(slotId), JSON.stringify(leagueData));
-      const index = await this.getSlotIndex();
+      // Read raw index directly to avoid triggering migration inside a save
+      let index;
+      try {
+        const raw = await AsyncStorage.getItem(INDEX_KEY);
+        index = raw !== null ? JSON.parse(raw) : emptyIndex();
+      } catch {
+        index = emptyIndex();
+      }
       index.slots[slotId] = buildSlotMeta(slotId, leagueData);
       await AsyncStorage.setItem(INDEX_KEY, JSON.stringify(index));
       return { success: true };

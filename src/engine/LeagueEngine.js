@@ -1650,7 +1650,7 @@ export class LeagueEngine {
     this.phase = data.phase || 'preseason';
     this.userTeamId = data.userTeamId;
     this.season = data.season || 1;
-    this.slotId = data.slotId || null;
+    this.slotId = data.slotId != null ? data.slotId : null;
     this.draftClass = data.draftClass;
     this.draftOrder = data.draftOrder;
     this.currentPickIndex = data.currentPickIndex;

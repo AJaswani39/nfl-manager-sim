@@ -41,7 +41,6 @@ export default function SettingsScreen({ route }) {
           style: 'destructive',
           onPress: () => {
             league.resetGame();
-            league.generateSchedule();
             navigation.reset({
               index: 0,
               routes: [{ name: 'Home' }],
