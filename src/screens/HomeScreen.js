@@ -1,84 +1,183 @@
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, FlatList, SafeAreaView, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  StyleSheet, Text, View, FlatList, SafeAreaView,
+  TouchableOpacity, Alert, ActivityIndicator, ScrollView,
+} from 'react-native';
 import { TEAMS } from '../data/teams';
 import { league } from '../engine/LeagueEngine';
 import { StorageService } from '../services/StorageService';
 
-export default function HomeScreen({ navigation }) {
-  const [hasSave, setHasSave] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [saveInfo, setSaveInfo] = useState(null);
+const PHASE_LABELS = {
+  preseason: 'Preseason',
+  regular: 'Regular Season',
+  playoffs: 'Playoffs',
+  offseason: 'Offseason',
+};
 
-  useEffect(() => {
-    checkForSave();
+function formatLastSaved(ts) {
+  if (!ts) return '';
+  const diffMs = Date.now() - ts;
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1) return 'Just now';
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  const diffDay = Math.floor(diffHr / 24);
+  return `${diffDay}d ago`;
+}
+
+export default function HomeScreen({ navigation }) {
+  const [slots, setSlots] = useState({ 1: null, 2: null, 3: null });
+  const [loading, setLoading] = useState(true);
+  const [phase, setPhase] = useState('slot_select'); // 'slot_select' | 'team_select'
+  const [targetSlot, setTargetSlot] = useState(null);
+
+  const refreshIndex = useCallback(async () => {
+    setLoading(true);
+    const index = await StorageService.getSlotIndex();
+    setSlots(index.slots);
+    setLoading(false);
   }, []);
 
-  const checkForSave = async () => {
-    setLoading(true);
-    const result = await StorageService.loadGame();
-    if (result.success && result.data) {
-      setHasSave(true);
-      const team = TEAMS.find(t => t.id === result.data.userTeamId);
-      setSaveInfo({
-        teamName: team ? `${team.city} ${team.name}` : 'Unknown Team',
-        week: result.data.currentWeek,
-        phase: result.data.phase,
-        season: result.data.season || 1,
-      });
-    } else {
-      setHasSave(false);
-      setSaveInfo(null);
-    }
-    setLoading(false);
-  };
+  useEffect(() => {
+    refreshIndex();
+  }, [refreshIndex]);
 
-  const handleContinue = async () => {
-    const result = await StorageService.loadGame();
+  // --- Slot select actions ---
+
+  const handleContinue = async (slotId) => {
+    const result = await StorageService.loadSlot(slotId);
     if (result.success) {
       league.loadSaveData(result.data);
+      league.slotId = slotId;
       navigation.navigate('Season', { teamId: result.data.userTeamId });
     } else {
-      Alert.alert('Error', 'Could not load save file');
+      Alert.alert('Error', 'Could not load save file.');
     }
   };
 
-  const handleNewGame = (teamId) => {
-    if (hasSave) {
+  const handleStartNew = (slotId) => {
+    const existing = slots[slotId];
+    if (existing) {
       Alert.alert(
-        'Start New Game?',
-        'This will overwrite your current save. Are you sure?',
+        'Overwrite Save?',
+        `This will erase your ${existing.teamName} franchise. Continue?`,
         [
           { text: 'Cancel', style: 'cancel' },
-          { 
-            text: 'New Game', 
+          {
+            text: 'Overwrite',
             style: 'destructive',
-            onPress: () => startNewGame(teamId)
-          }
+            onPress: () => { setTargetSlot(slotId); setPhase('team_select'); },
+          },
         ]
       );
     } else {
-      startNewGame(teamId);
+      setTargetSlot(slotId);
+      setPhase('team_select');
     }
   };
 
-  const startNewGame = async (teamId) => {
+  const handleDeleteSlot = (slotId) => {
+    const existing = slots[slotId];
+    if (!existing) return;
+    Alert.alert(
+      'Delete Franchise?',
+      `Delete your ${existing.teamName} save? This cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            await StorageService.deleteSlot(slotId);
+            refreshIndex();
+          },
+        },
+      ]
+    );
+  };
+
+  // --- Team select actions ---
+
+  const handlePickTeam = async (teamId) => {
     league.resetGame();
     league.userTeamId = teamId;
+    league.slotId = targetSlot;
     league.generateSchedule();
-    
-    // Auto-save the new game
     await StorageService.saveGame(league.getSaveData());
-    
     navigation.navigate('Season', { teamId });
   };
 
+  const handleBackToSlots = () => {
+    setTargetSlot(null);
+    setPhase('slot_select');
+  };
+
+  // --- Render helpers ---
+
+  const renderSlotCard = (slotId) => {
+    const data = slots[slotId];
+    const team = data ? TEAMS.find(t => t.id === data.teamId) : null;
+    const borderColor = team ? team.colors.primary : '#ccc';
+
+    if (data) {
+      return (
+        <View key={slotId} style={[styles.slotCard, { borderLeftColor: borderColor }]}>
+          <View style={styles.slotCardHeader}>
+            <View style={styles.slotCardInfo}>
+              <Text style={styles.slotNumber}>Slot {slotId}</Text>
+              <Text style={styles.slotTeamName}>{data.teamName}</Text>
+              <Text style={styles.slotMeta}>
+                Season {data.season} • Week {data.currentWeek} • {PHASE_LABELS[data.phase] || data.phase}
+              </Text>
+              <Text style={styles.slotSaved}>Saved {formatLastSaved(data.lastSaved)}</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.deleteBtn}
+              onPress={() => handleDeleteSlot(slotId)}
+            >
+              <Text style={styles.deleteBtnText}>✕</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.slotCardActions}>
+            <TouchableOpacity
+              style={styles.continueBtn}
+              onPress={() => handleContinue(slotId)}
+            >
+              <Text style={styles.continueBtnText}>▶ CONTINUE</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.newFranchiseSmallBtn}
+              onPress={() => handleStartNew(slotId)}
+            >
+              <Text style={styles.newFranchiseSmallText}>New Franchise</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      );
+    }
+
+    return (
+      <View key={slotId} style={styles.emptySlotCard}>
+        <Text style={styles.slotNumber}>Slot {slotId}</Text>
+        <Text style={styles.emptySlotLabel}>EMPTY SLOT</Text>
+        <TouchableOpacity
+          style={styles.newFranchiseBtn}
+          onPress={() => handleStartNew(slotId)}
+        >
+          <Text style={styles.newFranchiseBtnText}>+ Start New Franchise</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
   const renderTeam = ({ item }) => (
-    <TouchableOpacity 
-      style={[styles.card, { borderLeftColor: item.colors.primary }]}
-      onPress={() => handleNewGame(item.id)}
+    <TouchableOpacity
+      style={[styles.teamCard, { borderLeftColor: item.colors.primary }]}
+      onPress={() => handlePickTeam(item.id)}
     >
-      <View style={styles.cardHeader}>
-        <Text style={styles.city}>{item.city}</Text>
+      <View style={styles.teamCardHeader}>
+        <Text style={styles.teamCity}>{item.city}</Text>
         <Text style={styles.teamName}>{item.name}</Text>
       </View>
       <View style={styles.statsContainer}>
@@ -109,38 +208,37 @@ export default function HomeScreen({ navigation }) {
     );
   }
 
+  // --- Team select phase ---
+  if (phase === 'team_select') {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={handleBackToSlots} style={styles.backBtn}>
+            <Text style={styles.backBtnText}>← Back</Text>
+          </TouchableOpacity>
+          <Text style={styles.title}>Select a Team</Text>
+          <Text style={styles.subtitle}>Starting new franchise in Slot {targetSlot}</Text>
+        </View>
+        <FlatList
+          data={TEAMS}
+          renderItem={renderTeam}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.list}
+        />
+      </SafeAreaView>
+    );
+  }
+
+  // --- Slot select phase ---
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>NFL Manager 2026</Text>
-        <Text style={styles.subtitle}>
-          {hasSave ? 'Continue or Start New' : 'Select a Team to Manage'}
-        </Text>
+        <Text style={styles.subtitle}>Select a save slot</Text>
       </View>
-
-      {/* Continue Game Section */}
-      {hasSave && saveInfo && (
-        <View style={styles.continueSection}>
-          <TouchableOpacity style={styles.continueBtn} onPress={handleContinue}>
-            <View>
-              <Text style={styles.continueBtnTitle}>▶ CONTINUE</Text>
-              <Text style={styles.continueBtnInfo}>
-                {saveInfo.teamName} • Season {saveInfo.season} • Week {saveInfo.week}
-              </Text>
-            </View>
-            <Text style={styles.continueArrow}>→</Text>
-          </TouchableOpacity>
-          
-          <Text style={styles.orText}>— OR START NEW —</Text>
-        </View>
-      )}
-
-      <FlatList
-        data={TEAMS}
-        renderItem={renderTeam}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.list}
-      />
+      <ScrollView contentContainerStyle={styles.slotsContainer}>
+        {[1, 2, 3].map(renderSlotCard)}
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -176,44 +274,134 @@ const styles = StyleSheet.create({
     color: '#666',
     marginTop: 4,
   },
-  continueSection: {
-    padding: 16,
-    backgroundColor: '#e8f5e9',
+  backBtn: {
+    marginBottom: 8,
   },
-  continueBtn: {
-    backgroundColor: '#4caf50',
-    padding: 16,
-    borderRadius: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  continueBtnTitle: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  continueBtnInfo: {
-    color: 'rgba(255,255,255,0.9)',
-    fontSize: 13,
-    marginTop: 2,
-  },
-  continueArrow: {
-    color: '#fff',
-    fontSize: 24,
-    fontWeight: 'bold',
-  },
-  orText: {
-    textAlign: 'center',
-    color: '#666',
-    marginTop: 16,
-    fontSize: 12,
+  backBtnText: {
+    fontSize: 16,
+    color: '#1976d2',
     fontWeight: '600',
   },
+  slotsContainer: {
+    padding: 16,
+    gap: 12,
+  },
+  // Filled slot card
+  slotCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    borderLeftWidth: 6,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  slotCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  slotCardInfo: {
+    flex: 1,
+  },
+  slotNumber: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#999',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 2,
+  },
+  slotTeamName: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#1a1a1a',
+    marginBottom: 4,
+  },
+  slotMeta: {
+    fontSize: 13,
+    color: '#555',
+    marginBottom: 2,
+  },
+  slotSaved: {
+    fontSize: 12,
+    color: '#999',
+  },
+  deleteBtn: {
+    padding: 6,
+    marginLeft: 8,
+  },
+  deleteBtnText: {
+    fontSize: 16,
+    color: '#e53935',
+    fontWeight: 'bold',
+  },
+  slotCardActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  continueBtn: {
+    flex: 1,
+    backgroundColor: '#4caf50',
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  continueBtnText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: 'bold',
+  },
+  newFranchiseSmallBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ccc',
+    alignItems: 'center',
+  },
+  newFranchiseSmallText: {
+    fontSize: 13,
+    color: '#555',
+    fontWeight: '600',
+  },
+  // Empty slot card
+  emptySlotCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#e0e0e0',
+    borderStyle: 'dashed',
+    padding: 24,
+    alignItems: 'center',
+  },
+  emptySlotLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#bbb',
+    letterSpacing: 1,
+    marginTop: 4,
+    marginBottom: 16,
+  },
+  newFranchiseBtn: {
+    backgroundColor: '#1976d2',
+    paddingVertical: 10,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+  },
+  newFranchiseBtnText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: 'bold',
+  },
+  // Team select
   list: {
     padding: 16,
   },
-  card: {
+  teamCard: {
     backgroundColor: '#fff',
     borderRadius: 12,
     padding: 16,
@@ -228,10 +416,10 @@ const styles = StyleSheet.create({
     elevation: 3,
     borderLeftWidth: 6,
   },
-  cardHeader: {
+  teamCardHeader: {
     flex: 1,
   },
-  city: {
+  teamCity: {
     fontSize: 14,
     color: '#666',
     textTransform: 'uppercase',

@@ -37,6 +37,7 @@ export class LeagueEngine {
     this.draftHistory = []; // [{ season, pick, teamId, player: { name, position, overall } }]
     this.currentWeek = 1;
     this.season = 1;
+    this.slotId = null;
     this.phase = 'preseason'; // 'preseason', 'regular', 'playoffs', 'offseason'
     this.playerIndex = {}; // { playerId: { ...player, teamId } } — O(1) lookup
     this._standingsDirty = true; // dirty-flag for cached standings
@@ -1610,6 +1611,7 @@ export class LeagueEngine {
   // SAVE/LOAD GAME
   getSaveData() {
     return {
+      slotId: this.slotId,
       weeks: this.weeks,
       standings: this.standings,
       playerStats: this.playerStats,
@@ -1648,6 +1650,7 @@ export class LeagueEngine {
     this.phase = data.phase || 'preseason';
     this.userTeamId = data.userTeamId;
     this.season = data.season || 1;
+    this.slotId = data.slotId || null;
     this.draftClass = data.draftClass;
     this.draftOrder = data.draftOrder;
     this.currentPickIndex = data.currentPickIndex;
@@ -1696,6 +1699,7 @@ export class LeagueEngine {
     this.phase = 'preseason';
     this.userTeamId = null;
     this.season = 1;
+    this.slotId = null;
     this.draftClass = null;
     this.draftOrder = null;
     this.currentPickIndex = 0;

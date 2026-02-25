@@ -14,8 +14,8 @@ export default function SettingsScreen({ route }) {
 
   const handleDeleteSave = () => {
     Alert.alert(
-      'Delete Save Data',
-      'Are you sure? This will delete ALL saved game data and cannot be undone.',
+      'Delete Franchise?',
+      'This will delete your current franchise save and cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -23,7 +23,7 @@ export default function SettingsScreen({ route }) {
           style: 'destructive',
           onPress: async () => {
             await StorageService.deleteSave();
-            Alert.alert('Deleted', 'Save data has been deleted.');
+            navigation.reset({ index: 0, routes: [{ name: 'Home' }] });
           }
         }
       ]
