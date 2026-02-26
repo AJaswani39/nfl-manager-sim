@@ -680,6 +680,7 @@ export class LeagueEngine {
       const awayScore = this.calculateScore(match.away, match.home);
       match.result = { homeScore, awayScore };
       match.played = true;
+      this.generateGameNews(match);
 
       // STARTING PRESEASON LOGIC
       if (match.isPreseason) {
@@ -743,6 +744,8 @@ export class LeagueEngine {
           this.phase = 'offseason'; // End of season
        }
     }
+
+    this.generateWeeklyNews();
   }
 
   checkElimination() {
@@ -1160,6 +1163,54 @@ export class LeagueEngine {
   }
   // DRAFT & OFFSEASON
   
+  generateGameNews(match) {
+    if (match.isPreseason) return;
+    const { homeScore, awayScore } = match.result;
+    const homeWon = homeScore >= awayScore;
+    const winner = homeWon ? match.home : match.away;
+    const loser  = homeWon ? match.away : match.home;
+    const winScore = homeWon ? homeScore : awayScore;
+    const loseScore = homeWon ? awayScore : homeScore;
+    const margin = winScore - loseScore;
+    const combined = homeScore + awayScore;
+
+    if (match.type === 'Super Bowl') {
+      this.addNews(`${winner.name} win Super Bowl ${this.season}, defeating ${loser.name} ${winScore}-${loseScore}.`, 'result');
+      return;
+    }
+
+    if (['Wild Card', 'Divisional', 'Conference'].includes(match.type)) {
+      this.addNews(`${winner.name} advance past ${loser.name} in the ${match.type} round, ${winScore}-${loseScore}.`, 'result');
+      return;
+    }
+
+    if (loseScore === 0) {
+      this.addNews(`${winner.name} shut out ${loser.name} ${winScore}-0.`, 'result');
+      return;
+    }
+
+    if (margin > 21) {
+      this.addNews(`${winner.name} dominate ${loser.name} in a ${winScore}-${loseScore} blowout.`, 'result');
+      return;
+    }
+
+    if (combined > 55) {
+      this.addNews(`${match.home.name} and ${match.away.name} combine for ${combined} points in a ${homeScore}-${awayScore} shootout.`, 'result');
+      return;
+    }
+
+    if (margin <= 3) {
+      this.addNews(`${winner.name} edge out ${loser.name} ${winScore}-${loseScore} in a close contest.`, 'result');
+      return;
+    }
+
+    // Always report the user's team result
+    if (match.home.id === this.userTeamId || match.away.id === this.userTeamId) {
+      const userWon = winner.id === this.userTeamId;
+      this.addNews(`${winner.name} ${userWon ? 'defeat' : 'fall to'} ${loser.name} ${winScore}-${loseScore}.`, 'result');
+    }
+  }
+
   addNews(message, type = 'general') {
        this.news.unshift({
            message,
@@ -1170,25 +1221,41 @@ export class LeagueEngine {
        if (this.news.length > 50) this.news.pop();
    }
 
-   generateTransactions() {
-        const actions = [
-            "signed a 1-year extension.",
-            "is testing Free Agency.",
-            "demanded a trade.",
-            "was seen training with a new QB coach.",
-            "guarantees a playoff spot this year."
-        ];
-        
-        for(let i=0; i<3; i++) {
-             const teamId = TEAMS[Math.floor(Math.random()*TEAMS.length)].id;
-             const roster = this.rosters[teamId];
-             if (roster && roster.length > 0) {
-                 const p = roster[Math.floor(Math.random()*roster.length)];
-                 const action = actions[Math.floor(Math.random()*actions.length)];
-                 this.addNews(`${p.name} (${p.position}) ${action}`, 'transaction');
-             }
+   generateWeeklyNews() {
+    // 1. Injury returns — players about to come back next week
+    Object.keys(this.playerState).forEach(playerId => {
+      const state = this.playerState[playerId];
+      if (state && state.weeksOut === 1) {
+        const player = this.findPlayer(playerId);
+        if (player) {
+          this.addNews(`${player.name} (${player.position}) is expected to return from injury next week.`, 'injury');
         }
-   }
+      }
+    });
+
+    // 2. Win/loss streaks — any team on a 4-game streak
+    if (this.phase === 'regular') {
+      TEAMS.forEach(team => {
+        const allMatches = (this.standings[team.id]?.matches || [])
+          .filter(m => m.played && !m.isPreseason);
+        const recent = allMatches.slice(-4);
+        if (recent.length < 4) return;
+        const results = recent.map(m => {
+          const isHome = m.home.id === team.id;
+          return isHome ? m.result.homeScore > m.result.awayScore
+                        : m.result.awayScore > m.result.homeScore;
+        });
+        if (results.every(r => r === true))  this.addNews(`${team.name} have won 4 straight games.`, 'general');
+        if (results.every(r => r === false)) this.addNews(`${team.name} have lost 4 straight games.`, 'general');
+      });
+    }
+
+    // 3. Trade deadline reminder — 1 week out
+    const info = this.getTradeDeadlineInfo();
+    if (info && !info.passed && info.weeksUntil === 1) {
+      this.addNews('Trade deadline is next week. Make your moves now.', 'general');
+    }
+  }
 
   generateDraftClass() {
      const positions = ['QB', 'RB', 'WR', 'TE', 'OL', 'DL', 'LB', 'DB'];
@@ -1617,7 +1684,6 @@ export class LeagueEngine {
           }
       });
 
-      this.generateTransactions();
       this.generateFreeAgents();
 
       // Rebuild player index after roster mutations (retirements, progressions)

@@ -17,13 +17,18 @@ export default function NewsScreen({ navigation }) {
     }, [navigation]);
 
     const renderItem = ({ item }) => (
-        <View style={styles.newsItem}>
+        <View style={[styles.newsItem, {
+            borderColor: item.type === 'result' ? '#1565c0' :
+                         item.type === 'injury' ? '#d32f2f' :
+                         item.type === 'retire' ? '#555'    : '#007AFF'
+        }]}>
             <View style={styles.headerRow}>
                 <Text style={styles.weekText}>Week {item.week}</Text>
                 <View style={[
-                    styles.typeBadge, 
-                    item.type === 'retire' ? { backgroundColor: '#555' } :
-                    item.type === 'injury' ? { backgroundColor: '#d32f2f' } :
+                    styles.typeBadge,
+                    item.type === 'retire'  ? { backgroundColor: '#555' } :
+                    item.type === 'injury'  ? { backgroundColor: '#d32f2f' } :
+                    item.type === 'result'  ? { backgroundColor: '#1565c0' } :
                     { backgroundColor: '#388e3c' }
                 ]}>
                     <Text style={styles.typeText}>{item.type.toUpperCase()}</Text>
