@@ -781,7 +781,9 @@ export class LeagueEngine {
     const base = Math.floor(Math.random() * 20);
     const matchUpDiff = (offenseTeam.ratings.offense - defenseTeam.ratings.defense) / 2;
     const planMod = this.getGamePlanScoreModifier(offenseTeam.id, defenseTeam.id);
-    let score = 17 + base + matchUpDiff + planMod;
+    const offCoachBonus = this.getCoachBonus(offenseTeam.id, 'offense');
+    const defCoachBonus = this.getCoachBonus(defenseTeam.id, 'defense');
+    let score = 17 + base + matchUpDiff + planMod + offCoachBonus - defCoachBonus;
     if (Math.random() > 0.95) score += 14;
     if (Math.random() < 0.05) score = 0;
     return Math.max(0, Math.floor(score));
@@ -1560,6 +1562,15 @@ export class LeagueEngine {
                       if (performed) change += Math.floor(Math.random() * 2) + 1;
                   }
 
+                  // Potential drives upside — decline is unaffected
+                  if (change > 0 && p.potential) {
+                    const potentialMultiplier = {
+                      'A+': 1.5, 'A': 1.3, 'B+': 1.15, 'B': 1.0, 'C+': 0.85, 'C': 0.7, 'D': 0.5
+                    };
+                    const mult = potentialMultiplier[p.potential] ?? 1.0;
+                    change = Math.round(change * mult);
+                  }
+
                   p.overall = Math.max(50, Math.min(99, oldOverall + change));
                   kept.push(p);
                   totalOvr += p.overall; // accumulate in same pass
@@ -1579,9 +1590,19 @@ export class LeagueEngine {
               const avgOvr = Math.round(totalOvr / kept.length);
               const team = teamById[teamId];
               if (team) {
+                  const offPositions = new Set(['QB', 'RB', 'WR', 'TE', 'OL']);
+                  const defPositions = new Set(['DL', 'LB', 'DB', 'CB', 'S']);
+                  const offPlayers = kept.filter(p => offPositions.has(p.position));
+                  const defPlayers = kept.filter(p => defPositions.has(p.position));
+                  const offAvg = offPlayers.length > 0
+                      ? Math.round(offPlayers.reduce((s, p) => s + p.overall, 0) / offPlayers.length)
+                      : avgOvr;
+                  const defAvg = defPlayers.length > 0
+                      ? Math.round(defPlayers.reduce((s, p) => s + p.overall, 0) / defPlayers.length)
+                      : avgOvr;
                   team.ratings.overall = avgOvr;
-                  team.ratings.offense = avgOvr;
-                  team.ratings.defense = avgOvr;
+                  team.ratings.offense = offAvg;
+                  team.ratings.defense = defAvg;
               }
           }
       });
