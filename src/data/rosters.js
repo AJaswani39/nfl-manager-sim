@@ -34,6 +34,7 @@ export const ROSTERS = {
     p('kc_8', 'Nick Bolton', POSITIONS.LB, 87, 25),
     p('kc_9', 'Trent McDuffie', POSITIONS.DB, 92, 24),
     p('kc_10', 'Harrison Butker', POSITIONS.K, 88, 29),
+    p('kc_11', 'Tommy Townsend', POSITIONS.P, 84, 28),
   ],
   LAC: [
     p('lac_1', 'Justin Herbert', POSITIONS.QB, 91, 27),
@@ -45,6 +46,8 @@ export const ROSTERS = {
     p('lac_7', 'Joey Bosa', POSITIONS.DL, 89, 29),
     p('lac_8', 'Khalil Mack', POSITIONS.LB, 88, 34),
     p('lac_9', 'Derwin James', POSITIONS.DB, 91, 28),
+    p('lac_10', 'Cameron Dicker', POSITIONS.K, 82, 25),
+    p('lac_11', 'J.K. Scott', POSITIONS.P, 79, 29),
   ],
   LV: [
     p('lv_1', 'Gardner Minshew', POSITIONS.QB, 74, 29),
@@ -55,6 +58,8 @@ export const ROSTERS = {
     p('lv_6', 'Kolton Miller', POSITIONS.OL, 85, 29),
     p('lv_7', 'Maxx Crosby', POSITIONS.DL, 95, 27),
     p('lv_8', 'Robert Spillane', POSITIONS.LB, 79, 29),
+    p('lv_9', 'Daniel Carlson', POSITIONS.K, 88, 28),
+    p('lv_10', 'AJ Cole', POSITIONS.P, 86, 27),
   ],
   DEN: [
     p('den_1', 'Bo Nix', POSITIONS.QB, 76, 25),
@@ -64,6 +69,8 @@ export const ROSTERS = {
     p('den_5', 'Greg Dulcich', POSITIONS.TE, 75, 25),
     p('den_6', 'Quinn Meinerz', POSITIONS.OL, 86, 26),
     p('den_7', 'Patrick Surtain II', POSITIONS.DB, 96, 25),
+    p('den_8', 'Wil Lutz', POSITIONS.K, 83, 30),
+    p('den_9', 'Riley Dixon', POSITIONS.P, 80, 30),
   ],
 
   // AFC NORTH
@@ -78,6 +85,7 @@ export const ROSTERS = {
     p('bal_8', 'Roquan Smith', POSITIONS.LB, 95, 28),
     p('bal_9', 'Kyle Hamilton', POSITIONS.DB, 93, 24),
     p('bal_10', 'Justin Tucker', POSITIONS.K, 95, 35),
+    p('bal_11', 'Jordan Stout', POSITIONS.P, 82, 26),
   ],
   CIN: [
     p('cin_1', 'Joe Burrow', POSITIONS.QB, 94, 28),
@@ -88,6 +96,8 @@ export const ROSTERS = {
     p('cin_6', 'Orlando Brown Jr.', POSITIONS.OL, 84, 29),
     p('cin_7', 'Trey Hendrickson', POSITIONS.DL, 91, 30),
     p('cin_8', 'Logan Wilson', POSITIONS.LB, 84, 29),
+    p('cin_9', 'Evan McPherson', POSITIONS.K, 87, 25),
+    p('cin_10', 'Brad Robbins', POSITIONS.P, 78, 25),
   ],
   CLE: [
     p('cle_1', 'Deshaun Watson', POSITIONS.QB, 76, 29),
@@ -98,6 +108,8 @@ export const ROSTERS = {
     p('cle_6', 'Joel Bitonio', POSITIONS.OL, 88, 33),
     p('cle_7', 'Myles Garrett', POSITIONS.DL, 98, 29),
     p('cle_8', 'Denzel Ward', POSITIONS.DB, 90, 28),
+    p('cle_9', 'Dustin Hopkins', POSITIONS.K, 84, 33),
+    p('cle_10', 'Corey Bojorquez', POSITIONS.P, 83, 29),
   ],
   PIT: [
     p('pit_1', 'Russell Wilson', POSITIONS.QB, 75, 36),
@@ -108,6 +120,8 @@ export const ROSTERS = {
     p('pit_6', 'Broderick Jones', POSITIONS.OL, 79, 24),
     p('pit_7', 'T.J. Watt', POSITIONS.LB, 98, 30),
     p('pit_8', 'Minkah Fitzpatrick', POSITIONS.DB, 92, 28),
+    p('pit_9', 'Chris Boswell', POSITIONS.K, 90, 33),
+    p('pit_10', 'Pressley Harvin', POSITIONS.P, 82, 26),
   ],
 
   // AFC EAST
@@ -120,6 +134,8 @@ export const ROSTERS = {
     p('buf_6', 'Dion Dawkins', POSITIONS.OL, 87, 31),
     p('buf_7', 'Ed Oliver', POSITIONS.DL, 86, 27),
     p('buf_8', 'Matt Milano', POSITIONS.LB, 88, 31),
+    p('buf_9', 'Tyler Bass', POSITIONS.K, 83, 27),
+    p('buf_10', 'Sam Martin', POSITIONS.P, 80, 35),
   ],
   MIA: [
     p('mia_1', 'Tua Tagovailoa', POSITIONS.QB, 87, 27),
@@ -130,6 +146,8 @@ export const ROSTERS = {
     p('mia_6', 'Terron Armstead', POSITIONS.OL, 90, 34),
     p('mia_7', 'Jaelan Phillips', POSITIONS.LB, 86, 26),
     p('mia_8', 'Jevon Holland', POSITIONS.DB, 89, 25),
+    p('mia_9', 'Jason Sanders', POSITIONS.K, 85, 29),
+    p('mia_10', 'Jake Bailey', POSITIONS.P, 79, 27),
   ],
   NYJ: [
     p('nyj_1', 'Aaron Rodgers', POSITIONS.QB, 85, 41),
@@ -140,6 +158,8 @@ export const ROSTERS = {
     p('nyj_6', 'Tyron Smith', POSITIONS.OL, 89, 34),
     p('nyj_7', 'Quinnen Williams', POSITIONS.DL, 94, 27),
     p('nyj_8', 'Sauce Gardner', POSITIONS.DB, 97, 25),
+    p('nyj_9', 'Greg Zuerlein', POSITIONS.K, 80, 37),
+    p('nyj_10', 'Thomas Morstead', POSITIONS.P, 81, 38),
   ],
   NE: [
     p('ne_1', 'Drake Maye', POSITIONS.QB, 76, 23),
@@ -149,6 +169,8 @@ export const ROSTERS = {
     p('ne_5', 'Hunter Henry', POSITIONS.TE, 80, 30),
     p('ne_6', 'Mike Onwenu', POSITIONS.OL, 85, 27),
     p('ne_7', 'Christian Gonzalez', POSITIONS.DB, 86, 23),
+    p('ne_8', 'Chad Ryland', POSITIONS.K, 79, 25),
+    p('ne_9', 'Bryce Baringer', POSITIONS.P, 85, 24),
   ],
 
   // AFC SOUTH
@@ -162,6 +184,8 @@ export const ROSTERS = {
     p('hou_7', 'Laremy Tunsil', POSITIONS.OL, 91, 31),
     p('hou_8', 'Will Anderson Jr.', POSITIONS.DL, 91, 23),
     p('hou_9', 'Derek Stingley Jr.', POSITIONS.DB, 89, 24),
+    p('hou_10', 'Ka\'imi Fairbairn', POSITIONS.K, 84, 31),
+    p('hou_11', 'Cameron Johnston', POSITIONS.P, 81, 31),
   ],
   IND: [
     p('ind_1', 'Anthony Richardson', POSITIONS.QB, 77, 23),
@@ -171,6 +195,8 @@ export const ROSTERS = {
     p('ind_5', 'Quenton Nelson', POSITIONS.OL, 92, 29),
     p('ind_6', 'DeForest Buckner', POSITIONS.DL, 89, 31),
     p('ind_7', 'Zaire Franklin', POSITIONS.LB, 84, 28),
+    p('ind_8', 'Matt Gay', POSITIONS.K, 85, 30),
+    p('ind_9', 'Rigoberto Sanchez', POSITIONS.P, 80, 30),
   ],
   JAX: [
     p('jax_1', 'Trevor Lawrence', POSITIONS.QB, 84, 25),
@@ -180,6 +206,8 @@ export const ROSTERS = {
     p('jax_5', 'Evan Engram', POSITIONS.TE, 86, 30),
     p('jax_6', 'Josh Hines-Allen', POSITIONS.LB, 90, 28),
     p('jax_7', 'Tyson Campbell', POSITIONS.DB, 85, 25),
+    p('jax_8', 'Brandon McManus', POSITIONS.K, 82, 33),
+    p('jax_9', 'Logan Cooke', POSITIONS.P, 84, 28),
   ],
   TEN: [
     p('ten_1', 'Will Levis', POSITIONS.QB, 75, 26),
@@ -189,6 +217,8 @@ export const ROSTERS = {
     p('ten_5', 'Calvin Ridley', POSITIONS.WR, 85, 30),
     p('ten_6', 'Jeffery Simmons', POSITIONS.DL, 89, 28),
     p('ten_7', 'L\'Jarius Sneed', POSITIONS.DB, 90, 28),
+    p('ten_8', 'Nick Folk', POSITIONS.K, 82, 39),
+    p('ten_9', 'Ryan Stonehouse', POSITIONS.P, 87, 26),
   ],
 
   // NFC EAST
@@ -202,6 +232,7 @@ export const ROSTERS = {
     p('dal_7', 'Micah Parsons', POSITIONS.LB, 98, 26),
     p('dal_8', 'Trevon Diggs', POSITIONS.DB, 89, 27),
     p('dal_9', 'Brandon Aubrey', POSITIONS.K, 90, 29),
+    p('dal_10', 'Bryan Anger', POSITIONS.P, 83, 36),
   ],
   PHI: [
     p('phi_1', 'Jalen Hurts', POSITIONS.QB, 90, 27),
@@ -212,6 +243,8 @@ export const ROSTERS = {
     p('phi_6', 'Lane Johnson', POSITIONS.OL, 93, 35),
     p('phi_7', 'Jalen Carter', POSITIONS.DL, 88, 24),
     p('phi_8', 'Darius Slay', POSITIONS.DB, 85, 34),
+    p('phi_9', 'Jake Elliott', POSITIONS.K, 86, 29),
+    p('phi_10', 'Arryn Siposs', POSITIONS.P, 78, 29),
   ],
   NYG: [
     p('nyg_1', 'Daniel Jones', POSITIONS.QB, 74, 28),
@@ -221,6 +254,8 @@ export const ROSTERS = {
     p('nyg_5', 'Andrew Thomas', POSITIONS.OL, 91, 26),
     p('nyg_6', 'Dexter Lawrence', POSITIONS.DL, 96, 27),
     p('nyg_7', 'Brian Burns', POSITIONS.LB, 88, 27),
+    p('nyg_8', 'Graham Gano', POSITIONS.K, 82, 37),
+    p('nyg_9', 'Jamie Gillan', POSITIONS.P, 79, 28),
   ],
   WAS: [
     p('was_1', 'Jayden Daniels', POSITIONS.QB, 78, 24),
@@ -230,6 +265,8 @@ export const ROSTERS = {
     p('was_5', 'Zach Ertz', POSITIONS.TE, 78, 34),
     p('was_6', 'Daron Payne', POSITIONS.DL, 86, 28),
     p('was_7', 'Jonathan Allen', POSITIONS.DL, 87, 30),
+    p('was_8', 'Austin Seibert', POSITIONS.K, 80, 28),
+    p('was_9', 'Tress Way', POSITIONS.P, 86, 34),
   ],
 
   // NFC WEST
@@ -242,6 +279,8 @@ export const ROSTERS = {
     p('sf_6', 'Trent Williams', POSITIONS.OL, 98, 37),
     p('sf_7', 'Nick Bosa', POSITIONS.DL, 97, 27),
     p('sf_8', 'Fred Warner', POSITIONS.LB, 98, 28),
+    p('sf_9', 'Jake Moody', POSITIONS.K, 83, 25),
+    p('sf_10', 'Mitch Wishnowsky', POSITIONS.P, 82, 29),
   ],
   LAR: [
     p('lar_1', 'Matthew Stafford', POSITIONS.QB, 87, 37),
@@ -250,6 +289,8 @@ export const ROSTERS = {
     p('lar_4', 'Puka Nacua', POSITIONS.WR, 91, 24),
     p('lar_5', 'Kobie Turner', POSITIONS.DL, 84, 26),
     p('lar_6', 'Byron Young', POSITIONS.LB, 79, 27),
+    p('lar_7', 'Joshua Karty', POSITIONS.K, 80, 23),
+    p('lar_8', 'Ethan Evans', POSITIONS.P, 79, 24),
   ],
   SEA: [
     p('sea_1', 'Geno Smith', POSITIONS.QB, 81, 34),
@@ -259,6 +300,8 @@ export const ROSTERS = {
     p('sea_5', 'Jaxon Smith-Njigba', POSITIONS.WR, 83, 23),
     p('sea_6', 'Noah Fant', POSITIONS.TE, 79, 27),
     p('sea_7', 'Devon Witherspoon', POSITIONS.DB, 89, 24),
+    p('sea_8', 'Jason Myers', POSITIONS.K, 84, 32),
+    p('sea_9', 'Michael Dickson', POSITIONS.P, 88, 28),
   ],
   ARI: [
     p('ari_1', 'Kyler Murray', POSITIONS.QB, 83, 28),
@@ -267,6 +310,8 @@ export const ROSTERS = {
     p('ari_4', 'Michael Wilson', POSITIONS.WR, 78, 25),
     p('ari_5', 'Trey McBride', POSITIONS.TE, 87, 25),
     p('ari_6', 'Budda Baker', POSITIONS.DB, 88, 29),
+    p('ari_7', 'Matt Prater', POSITIONS.K, 79, 40),
+    p('ari_8', 'Blake Gillikin', POSITIONS.P, 80, 27),
   ],
 
   // NFC NORTH
@@ -279,6 +324,8 @@ export const ROSTERS = {
     p('det_6', 'Penei Sewell', POSITIONS.OL, 96, 24),
     p('det_7', 'Aidan Hutchinson', POSITIONS.DL, 93, 25),
     p('det_8', 'Brian Branch', POSITIONS.DB, 86, 23),
+    p('det_9', 'Michael Badgley', POSITIONS.K, 80, 29),
+    p('det_10', 'Jack Fox', POSITIONS.P, 88, 27),
   ],
   GB: [
     p('gb_1', 'Jordan Love', POSITIONS.QB, 85, 26),
@@ -288,6 +335,8 @@ export const ROSTERS = {
     p('gb_5', 'Romeo Doubs', POSITIONS.WR, 79, 25),
     p('gb_6', 'Luke Musgrave', POSITIONS.TE, 78, 24),
     p('gb_7', 'Jaire Alexander', POSITIONS.DB, 90, 28),
+    p('gb_8', 'Anders Carlson', POSITIONS.K, 81, 25),
+    p('gb_9', 'Daniel Whelan', POSITIONS.P, 82, 25),
   ],
   MIN: [
     p('min_1', 'J.J. McCarthy', POSITIONS.QB, 75, 22),
@@ -296,7 +345,9 @@ export const ROSTERS = {
     p('min_4', 'Jordan Addison', POSITIONS.WR, 83, 23),
     p('min_5', 'T.J. Hockenson', POSITIONS.TE, 90, 28),
     p('min_6', 'Christian Darrisaw', POSITIONS.OL, 91, 26),
-    p('min_7', 'Danielle Hunter', POSITIONS.DL, 89, 30), // Note: Actually on Texans in 2024, but keeping for balance if needed or verify current roster state
+    p('min_7', 'Danielle Hunter', POSITIONS.DL, 89, 30),
+    p('min_8', 'Will Reichard', POSITIONS.K, 82, 24),
+    p('min_9', 'Ryan Wright', POSITIONS.P, 83, 26),
   ],
   CHI: [
     p('chi_1', 'Caleb Williams', POSITIONS.QB, 79, 23),
@@ -306,6 +357,8 @@ export const ROSTERS = {
     p('chi_5', 'Rome Odunze', POSITIONS.WR, 79, 22),
     p('chi_6', 'Cole Kmet', POSITIONS.TE, 82, 26),
     p('chi_7', 'Jaylon Johnson', POSITIONS.DB, 91, 26),
+    p('chi_8', 'Cairo Santos', POSITIONS.K, 83, 33),
+    p('chi_9', 'Trenton Gill', POSITIONS.P, 80, 26),
   ],
 
   // NFC SOUTH
@@ -316,6 +369,8 @@ export const ROSTERS = {
     p('atl_4', 'Kyle Pitts', POSITIONS.TE, 84, 24),
     p('atl_5', 'Chris Lindstrom', POSITIONS.OL, 92, 28),
     p('atl_6', 'Jessie Bates III', POSITIONS.DB, 93, 28),
+    p('atl_7', 'Younghoe Koo', POSITIONS.K, 87, 29),
+    p('atl_8', 'Bradley Pinion', POSITIONS.P, 79, 31),
   ],
   NO: [
     p('no_1', 'Derek Carr', POSITIONS.QB, 78, 34),
@@ -325,6 +380,8 @@ export const ROSTERS = {
     p('no_5', 'Taysom Hill', POSITIONS.TE, 79, 35),
     p('no_6', 'Demario Davis', POSITIONS.LB, 89, 36),
     p('no_7', 'Tyrann Mathieu', POSITIONS.DB, 85, 33),
+    p('no_8', 'Blake Grupe', POSITIONS.K, 80, 26),
+    p('no_9', 'Lou Hedley', POSITIONS.P, 82, 27),
   ],
   TB: [
     p('tb_1', 'Baker Mayfield', POSITIONS.QB, 81, 30),
@@ -334,6 +391,8 @@ export const ROSTERS = {
     p('tb_5', 'Cade Otton', POSITIONS.TE, 78, 26),
     p('tb_6', 'Tristan Wirfs', POSITIONS.OL, 94, 26),
     p('tb_7', 'Antoine Winfield Jr.', POSITIONS.DB, 95, 26),
+    p('tb_8', 'Chase McLaughlin', POSITIONS.K, 81, 29),
+    p('tb_9', 'Jake Camarda', POSITIONS.P, 85, 25),
   ],
   CAR: [
     p('car_1', 'Bryce Young', POSITIONS.QB, 73, 24),
@@ -343,5 +402,7 @@ export const ROSTERS = {
     p('car_5', 'Adam Thielen', POSITIONS.WR, 79, 35),
     p('car_6', 'Derrick Brown', POSITIONS.DL, 91, 27),
     p('car_7', 'Jaycee Horn', POSITIONS.DB, 84, 25),
+    p('car_8', 'Eddy Pineiro', POSITIONS.K, 79, 29),
+    p('car_9', 'Johnny Hekker', POSITIONS.P, 80, 35),
   ],
 };

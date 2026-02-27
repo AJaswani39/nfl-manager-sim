@@ -180,7 +180,11 @@ export class MatchEngine {
 
   resolveKickoff(type) {
       this.state.kickoffPending = false;
-      
+
+      const kickingSide   = this.state.possession;
+      const receivingSide = kickingSide === 'home' ? 'away' : 'home';
+      const returner = this.getPlayerFromSide(receivingSide, 'KR');
+
       const kickingTeam = this.getOffenseTeam();
       const receivingTeam = this.getDefenseTeam(); // Before possession flip
 
@@ -220,7 +224,7 @@ export class MatchEngine {
               if (Math.random() < 0.01) {
                   this.state.ballOn = 100;
                   this.score(7);
-                  this.addToLog("KICKOFF RETURN TOUCHDOWN! INCREDIBLE!");
+                  this.addToLog(`KICKOFF RETURN TOUCHDOWN by ${returner.name}! INCREDIBLE!`);
                   this.changePossession('score');
                   return;
               }
@@ -228,31 +232,23 @@ export class MatchEngine {
               // Muff Chance
               if (Math.random() < 0.02) {
                   if (Math.random() < 0.5) {
-                      // Lost Fumble
-                      this.addToLog("MUFFED KICKOFF! Recovered by Kicking Team!");
-                      this.state.possession = this.state.possession === 'home' ? 'away' : 'home'; // Flip back to Kicking Team
-                      this.state.ballOn = 20; // Recovered deep
+                      this.addToLog(`MUFFED KICKOFF by ${returner.name}! Recovered by Kicking Team!`);
+                      this.state.possession = this.state.possession === 'home' ? 'away' : 'home';
+                      this.state.ballOn = 20;
                       this.state.down = 1; this.state.distance = 10;
                   } else {
-                      // Recovered
-                      this.addToLog("MUFFED KICKOFF! But recovered by the Return Team at the 10.");
-                      this.state.ballOn = 10; // Pinned deep
+                      this.addToLog(`MUFFED KICKOFF by ${returner.name}! Recovered at the 10.`);
+                      this.state.ballOn = 10;
                       this.state.down = 1; this.state.distance = 10;
                   }
                   return;
               }
 
-
-              // Standard Return
-              // Kick starts from 35. Lands at (35 + kickDist).
-              // e.g. 35 + 70 = 105 (5 yds deep).
-              // If lands in endzone, mostly touchback unless returned.
-              // Let's simplify: Return puts ball at Own X.
               let startYard = 20 + Math.floor(Math.random() * 15); // Own 20-35
               if (returnYds > 40) startYard += 20; // Big return
 
               this.state.ballOn = startYard;
-              this.addToLog(`Kickoff returned to the ${this.getYardLineText(startYard)}.`);
+              this.addToLog(`${returner.name} returns the kickoff to the ${this.getYardLineText(startYard)}.`);
           } else {
               // Kick out of bounds
               this.addToLog("Kickoff out of bounds. Penalty.");
@@ -294,7 +290,11 @@ export class MatchEngine {
   // Helper to flip field
   changePossession(type = 'punt') {
     // types: 'kickoff', 'punt', 'downs', 'turnover', 'score', 'safety_kick'
-    
+
+    // Capture sides before any possession flip (needed for named special teams players)
+    const puntingSide   = this.state.possession;
+    const receivingSide = puntingSide === 'home' ? 'away' : 'home';
+
     // Safety Kick
     if (type === 'safety_kick') {
         this.addToLog(`Free Kick after Safety from ${this.getOffenseTeam().abbreviation}.`);
@@ -323,68 +323,56 @@ export class MatchEngine {
        // Should use resolveKickoff now, but keep fallback
        newLoc = 25; 
     } else if (type === 'punt') {
+      const punter   = this.getPlayerFromSide(puntingSide, 'P');
+      const returner = this.getPlayerFromSide(receivingSide, 'KR');
       const puntDist = 35 + Math.floor(Math.random() * 25); // 35-60 yds
-      const landingSpot = this.state.ballOn + puntDist; 
-      
+      const landingSpot = this.state.ballOn + puntDist;
+
       if (landingSpot >= 100) {
-          // Touchback
           newLoc = 20;
-          this.addToLog("Punt bounces into Endzone. Touchback.");
+          this.addToLog(`${punter.name} punts into the endzone. Touchback.`);
       } else {
-          // Check for Coffin Corner (landed inside 5)
           const pinned = landingSpot >= 95;
-          
+
           // Muffed Catch Chance (3%)
           if (Math.random() < 0.03) {
                if (Math.random() < 0.5) {
-                   this.addToLog("MUFFED PUNT! Recovered by Kicking Team!");
-                   // Revert possession change
+                   this.addToLog(`MUFFED PUNT by ${returner.name}! Recovered by Kicking Team!`);
                    this.state.possession = this.state.possession === 'home' ? 'away' : 'home';
-                   this.state.ballOn = landingSpot; 
+                   this.state.ballOn = landingSpot;
                    this.state.down = 1; this.state.distance = 10;
-                   return; 
+                   return;
                } else {
                    newLoc = 100 - landingSpot;
-                   this.addToLog(`Muffed Punt! Recovered by Return Team at the ${this.getYardLineText(newLoc)}.`);
+                   this.addToLog(`MUFFED PUNT by ${returner.name}! Recovered at the ${this.getYardLineText(newLoc)}.`);
                }
           } else if (pinned) {
               const spot = 100 - landingSpot;
               newLoc = spot;
-              this.addToLog(`Perfect Punt! Pinned at the ${this.getYardLineText(spot)}!`);
+              this.addToLog(`${punter.name} pins ${this.getOffenseTeam().abbreviation} at the ${this.getYardLineText(spot)}!`);
           } else {
-              // Return Logic
               const rand = Math.random();
-              
+
               if (rand < 0.25) {
-                  // Fair Catch
                   newLoc = 100 - landingSpot;
-                  this.addToLog("Fair Catch.");
+                  this.addToLog(`Fair catch by ${returner.name}.`);
               } else {
-                   // Return
-                   let returnYards = -2 + Math.floor(Math.random() * 12); // -2 to 10
-                   
-                   // Big Return Chance
+                   let returnYards = -2 + Math.floor(Math.random() * 12);
                    if (Math.random() < 0.08) returnYards += 15;
-                   
-                   // TD Chance
+
                    if (Math.random() < 0.01) {
                         this.state.ballOn = 100;
                         this.score(7);
-                        this.addToLog("PUNT RETURN TOUCHDOWN!!!");
+                        this.addToLog(`PUNT RETURN TOUCHDOWN by ${returner.name}!!!`);
                         this.changePossession('score');
                         return;
                    }
-                   
+
                    const finalSpot = landingSpot - returnYards;
                    newLoc = 100 - finalSpot;
-                   
-                   // Ensure not out of back of endzone (safety?)
-                   if (newLoc <= 0) {
-                       // Safety? Unlikely on return unless ran backwards
-                       newLoc = 1; 
-                   }
-                   
-                   this.addToLog(`Punt returned ${returnYards} yds to ${this.getYardLineText(newLoc)}.`);
+                   if (newLoc <= 0) newLoc = 1;
+
+                   this.addToLog(`${returner.name} returns ${returnYards} yds to ${this.getYardLineText(newLoc)}.`);
               }
           }
       }
@@ -399,6 +387,17 @@ export class MatchEngine {
   getOffenseTeam() { return this.state.possession === 'home' ? this.homeTeam : this.awayTeam; }
   getDefenseTeam() { return this.state.possession === 'home' ? this.awayTeam : this.homeTeam; }
 
+  // Fetch a player from a specific side regardless of current possession (for special teams)
+  getPlayerFromSide(side, positionGroup) {
+    const cache = this._positionCache[side];
+    if (!cache) return { name: 'Player' };
+    const candidates = cache[positionGroup] || cache.all;
+    const healthy = candidates.filter(p => !this.isInjured(p.id));
+    const pool = healthy.length > 0 ? healthy : candidates;
+    if (pool.length === 0) return { name: 'Player' };
+    return pool[0];
+  }
+
   _buildPositionCache(roster, teamId) {
     if (!roster || roster.length === 0) return null;
     const prefix = teamId.toLowerCase() + '_';
@@ -411,6 +410,9 @@ export class MatchEngine {
       WR: base.filter(p => p.position === 'WR' || p.position === 'TE'),
       DL: base.filter(p => p.position === 'DL' || p.position === 'LB'),
       DB: base.filter(p => p.position === 'DB' || p.position === 'CB' || p.position === 'S'),
+      K:  base.filter(p => p.position === 'K'),
+      P:  base.filter(p => p.position === 'P'),
+      KR: base.filter(p => p.position === 'RB' || p.position === 'DB'),
     };
   }
 
@@ -508,8 +510,8 @@ export class MatchEngine {
 
           if (ordered.length === 0) return pool[Math.floor(Math.random() * pool.length)];
 
-          // QB: always use starter
-          if (positionGroup === 'QB') return ordered[0];
+          // QB, K, P: always use starter
+          if (positionGroup === 'QB' || positionGroup === 'K' || positionGroup === 'P') return ordered[0];
 
           // RB: starter ~70%, backup ~25%, third ~5%
           if (positionGroup === 'RB') {
