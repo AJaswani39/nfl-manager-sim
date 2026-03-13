@@ -13,7 +13,10 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "runtimeVersion": {
+        "policy": "appVersion"
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -21,7 +24,8 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.ajaswani39.nflmanager"
+      "package": "com.ajaswani39.nflmanager",
+      "runtimeVersion": "1.0.0"
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -31,6 +35,9 @@
         "projectId": "120ef64d-aefc-4ff1-beaf-f7053e11fbd0"
       }
     },
-    "owner": "ajaswani39-2-2"
+    "owner": "ajaswani39-2-2",
+    "updates": {
+      "url": "https://u.expo.dev/120ef64d-aefc-4ff1-beaf-f7053e11fbd0"
+    }
   }
 }
