@@ -18,13 +18,14 @@ export const DEFENSE_TYPES = {
 
 
 export class MatchEngine {
-  constructor(homeTeam, awayTeam, homeRoster, awayRoster, isPlayoff = false, injuries = {}, homeDepthChart = null, awayDepthChart = null, homeGamePlan = null, awayGamePlan = null) {
+  constructor(homeTeam, awayTeam, homeRoster, awayRoster, isPlayoff = false, injuries = {}, homeDepthChart = null, awayDepthChart = null, homeGamePlan = null, awayGamePlan = null, userTeamId = null) {
     this.homeTeam = homeTeam;
     this.awayTeam = awayTeam;
     this.isPlayoff = isPlayoff;
     this.injuries = JSON.parse(JSON.stringify(injuries));
     this.newInjuries = {};
     this.receivedFirstHalf = null;
+    this._userSide = userTeamId === homeTeam.id ? 'home' : (userTeamId === awayTeam.id ? 'away' : null);
 
     this.state = {
       quarter: 1,
@@ -71,14 +72,50 @@ export class MatchEngine {
       return this.injuries[pid] && this.injuries[pid].weeksOut > 0;
   }
 
-  checkForInjury(player) {
+  checkForInjury(player, side) {
       if (!player) return;
       if (Math.random() < 0.015) { // 1.5% Chance
-          const weeks = Math.floor(Math.random() * 5) + 1; 
+          const weeks = Math.floor(Math.random() * 5) + 1;
           this.injuries[player.id] = { weeksOut: weeks };
           this.newInjuries[player.id] = weeks;
           this.addToLog(`INJURY ALERT: ${player.name} is hurt on the play!`);
+
+          // Show substitution modal for user's team
+          if (side && side === this._userSide && !this.state.pendingEvent) {
+            const cache = this._positionCache[side];
+            if (cache) {
+              const posGroup = this._getPositionGroup(player.position);
+              const candidates = (cache[posGroup] || [])
+                .filter(p => p.id !== player.id && !this.isInjured(p.id));
+
+              if (candidates.length > 0) {
+                this.state.pendingEvent = {
+                  type: 'INJURY_SUB',
+                  title: 'Player Injured',
+                  message: `${player.name} (${player.position}, OVR ${player.overall}) is out ${weeks} week${weeks > 1 ? 's' : ''}. Choose a replacement.`,
+                  injuredPlayer: player,
+                  candidates: candidates.map(c => ({
+                    id: c.id,
+                    name: c.name,
+                    position: c.position,
+                    overall: c.overall,
+                  })),
+                  options: candidates.map(c => ({
+                    label: `${c.name} (${c.position}, ${c.overall} OVR)`,
+                    action: c.id,
+                  })),
+                };
+              }
+            }
+          }
       }
+  }
+
+  _getPositionGroup(position) {
+    if (['WR', 'TE'].includes(position)) return 'WR';
+    if (['DL', 'LB'].includes(position)) return 'DL';
+    if (['DB', 'CB', 'S'].includes(position)) return 'DB';
+    return position;
   }
 
   // Returns TRUE if an event interrupted the play
@@ -165,6 +202,14 @@ export class MatchEngine {
               this.state.pendingEvent = null;
               return { newPlay: evt.originalPlay };
           }
+      } else if (evt.type === 'INJURY_SUB') {
+          // action = playerId of the chosen replacement
+          const chosen = evt.candidates?.find(c => c.id === action);
+          if (chosen) {
+            this.addToLog(`${chosen.name} enters the game replacing ${evt.injuredPlayer.name}.`);
+          }
+          this.state.pendingEvent = null;
+          return { newPlay: null };
       } else {
           // Just clearing the modal for penalties
           this.state.pendingEvent = null;
@@ -847,12 +892,24 @@ export class MatchEngine {
       }
     }
     
-    // Check for injuries
-    const participants = [qb, dl, lb, db];
-    if (offChoice.includes("RUN")) participants.push(rb);
-    if (offChoice.includes("PASS")) participants.push(wr);
-    
-    [...new Set(participants)].forEach(p => this.checkForInjury(p));
+    // Check for injuries — pass side so we can show substitution modals for user's team
+    const offSide = this.state.possession;
+    const defSide = offSide === 'home' ? 'away' : 'home';
+    const offParticipants = [qb];
+    if (offChoice.includes("RUN")) offParticipants.push(rb);
+    if (offChoice.includes("PASS")) offParticipants.push(wr);
+    const defParticipants = [dl, lb, db];
+
+    for (const p of [...new Set(offParticipants)]) {
+      this.checkForInjury(p, offSide);
+      if (this.state.pendingEvent) break;
+    }
+    if (!this.state.pendingEvent) {
+      for (const p of [...new Set(defParticipants)]) {
+        this.checkForInjury(p, defSide);
+        if (this.state.pendingEvent) break;
+      }
+    }
 
     this.tickClock();
   }

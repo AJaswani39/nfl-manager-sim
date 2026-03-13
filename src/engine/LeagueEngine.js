@@ -35,6 +35,8 @@ export class LeagueEngine {
     this.depthCharts = {}; // { teamId: { position: [playerId, ...] } }
     this.gamePlans = {}; // { teamId: { offense: 'balanced', defense: 'balanced' } }
     this.draftHistory = []; // [{ season, pick, teamId, player: { name, position, overall } }]
+    this.practiceSquads = {}; // { teamId: [playerObj, ...] } — practice squad roster
+    this.injuredReserve = {}; // { teamId: [{ playerId, player, weekPlaced, minWeeks }] }
     this.currentWeek = 1;
     this.season = 1;
     this.slotId = null;
@@ -49,6 +51,8 @@ export class LeagueEngine {
     this.rebuildPlayerIndex();
     this.initializeDepthCharts();
     this.initializeGamePlans();
+    this.initializePracticeSquads();
+    this.initializeInjuredReserve();
   }
 
   // --- TRADE DEADLINE ---
@@ -133,6 +137,18 @@ export class LeagueEngine {
     for (const teamId of Object.keys(this.rosters)) {
       for (const player of this.rosters[teamId]) {
         this.playerIndex[player.id] = { ...player, teamId };
+      }
+    }
+    // Index practice squad players
+    for (const teamId of Object.keys(this.practiceSquads || {})) {
+      for (const player of this.practiceSquads[teamId]) {
+        this.playerIndex[player.id] = { ...player, teamId, onPracticeSquad: true };
+      }
+    }
+    // Index injured reserve players
+    for (const teamId of Object.keys(this.injuredReserve || {})) {
+      for (const entry of (this.injuredReserve[teamId] || [])) {
+        this.playerIndex[entry.playerId] = { ...entry.player, teamId, onIR: true };
       }
     }
   }
@@ -660,8 +676,21 @@ export class LeagueEngine {
         Object.keys(this.playerState).forEach(pid => {
             if (this.playerState[pid].weeksOut > 0) {
                 this.playerState[pid].weeksOut--;
-                if (this.playerState[pid].weeksOut <= 0) delete this.playerState[pid];
+                // Don't auto-clear injury state for players on IR
+                const isOnIR = Object.values(this.injuredReserve || {}).some(
+                  irList => irList.some(e => e.playerId === pid)
+                );
+                if (this.playerState[pid].weeksOut <= 0 && !isOnIR) {
+                  delete this.playerState[pid];
+                }
             }
+        });
+
+        // CPU teams auto-manage practice squad and IR
+        TEAMS.forEach(team => {
+          if (team.id !== this.userTeamId) {
+            this.cpuManagePracticeSquadAndIR(team.id);
+          }
         });
     }
 
@@ -1459,6 +1488,213 @@ export class LeagueEngine {
     return player;
   }
 
+  // --- PRACTICE SQUAD ---
+  initializePracticeSquads() {
+    const positions = ['QB', 'RB', 'WR', 'TE', 'OL', 'DL', 'LB', 'DB', 'K', 'P'];
+    const firstNames = ['Mike', 'Chris', 'David', 'Tyler', 'Brandon', 'Jason', 'Ryan', 'Kevin', 'Matt', 'Alex',
+                        'Jordan', 'Sam', 'Trey', 'Jalen', 'Darius', 'Marcus', 'Terrell', 'DeShawn', 'Malik', 'Andre'];
+    const lastNames = ['Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis', 'Rodriguez', 'Martinez', 'Anderson',
+                       'Thomas', 'Jackson', 'White', 'Harris', 'Thompson', 'Clark', 'Lewis', 'Robinson', 'Walker', 'Hall'];
+
+    TEAMS.forEach(team => {
+      if (this.practiceSquads[team.id] && this.practiceSquads[team.id].length > 0) return;
+      this.practiceSquads[team.id] = [];
+      for (let i = 0; i < 10; i++) {
+        const pos = positions[Math.floor(Math.random() * positions.length)];
+        const overall = 50 + Math.floor(Math.random() * 23); // 50-72
+        const age = 22 + Math.floor(Math.random() * 6); // 22-27
+        const player = {
+          id: `ps_${team.id}_${Date.now()}_${i}`,
+          name: `${firstNames[Math.floor(Math.random() * firstNames.length)]} ${lastNames[Math.floor(Math.random() * lastNames.length)]}`,
+          position: pos,
+          overall,
+          age,
+          stats: {},
+        };
+        this.practiceSquads[team.id].push(player);
+        this._indexAddPlayer(player, team.id);
+      }
+    });
+  }
+
+  _generatePracticeSquadPlayer(teamId, index) {
+    const positions = ['QB', 'RB', 'WR', 'TE', 'OL', 'DL', 'LB', 'DB', 'K', 'P'];
+    const firstNames = ['Mike', 'Chris', 'David', 'Tyler', 'Brandon', 'Jason', 'Ryan', 'Kevin', 'Matt', 'Alex',
+                        'Jordan', 'Sam', 'Trey', 'Jalen', 'Darius', 'Marcus', 'Terrell', 'DeShawn', 'Malik', 'Andre'];
+    const lastNames = ['Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis', 'Rodriguez', 'Martinez', 'Anderson',
+                       'Thomas', 'Jackson', 'White', 'Harris', 'Thompson', 'Clark', 'Lewis', 'Robinson', 'Walker', 'Hall'];
+    const pos = positions[Math.floor(Math.random() * positions.length)];
+    const overall = 50 + Math.floor(Math.random() * 23);
+    const age = 22 + Math.floor(Math.random() * 6);
+    return {
+      id: `ps_${teamId}_${Date.now()}_${index}`,
+      name: `${firstNames[Math.floor(Math.random() * firstNames.length)]} ${lastNames[Math.floor(Math.random() * lastNames.length)]}`,
+      position: pos,
+      overall,
+      age,
+      stats: {},
+    };
+  }
+
+  getPracticeSquad(teamId) {
+    return this.practiceSquads[teamId] || [];
+  }
+
+  promoteFromPracticeSquad(teamId, playerId) {
+    const ps = this.practiceSquads[teamId];
+    if (!ps) return null;
+    const idx = ps.findIndex(p => p.id === playerId);
+    if (idx === -1) return null;
+
+    const player = ps.splice(idx, 1)[0];
+    if (!this.rosters[teamId]) this.rosters[teamId] = [];
+    this.rosters[teamId].push(player);
+    this._indexAddPlayer(player, teamId);
+    this.addToDepthChart(teamId, player);
+
+    // Assign salary
+    const salary = this.calculateSalary(player.overall, player.position);
+    this.salaries[player.id] = { amount: salary, years: 1 };
+    this.updateTeamSpending(teamId);
+
+    // Init stats
+    this.ensurePlayerStats(player.id);
+    this.addNews(`${player.name} (${player.position}) promoted from practice squad by ${teamId}.`, 'transaction');
+    return player;
+  }
+
+  demoteToPracticeSquad(teamId, playerId) {
+    const roster = this.rosters[teamId];
+    if (!roster) return null;
+    const idx = roster.findIndex(p => p.id === playerId);
+    if (idx === -1) return null;
+
+    // Reject if practice squad is full (max 16)
+    const ps = this.practiceSquads[teamId] || [];
+    if (ps.length >= 16) return null;
+
+    const player = roster.splice(idx, 1)[0];
+    this.removeFromDepthChart(teamId, playerId);
+
+    // Remove salary
+    delete this.salaries[playerId];
+    this.updateTeamSpending(teamId);
+
+    if (!this.practiceSquads[teamId]) this.practiceSquads[teamId] = [];
+    this.practiceSquads[teamId].push(player);
+    this._indexAddPlayer(player, teamId);
+    this.addNews(`${player.name} (${player.position}) demoted to practice squad by ${teamId}.`, 'transaction');
+    return player;
+  }
+
+  // --- INJURED RESERVE ---
+  initializeInjuredReserve() {
+    TEAMS.forEach(team => {
+      if (!this.injuredReserve[team.id]) {
+        this.injuredReserve[team.id] = [];
+      }
+    });
+  }
+
+  placeOnIR(teamId, playerId) {
+    const roster = this.rosters[teamId];
+    if (!roster) return null;
+    const idx = roster.findIndex(p => p.id === playerId);
+    if (idx === -1) return null;
+
+    // Must be injured to go on IR
+    const state = this.playerState[playerId];
+    if (!state || state.weeksOut <= 0) return null;
+
+    const player = roster.splice(idx, 1)[0];
+    this.removeFromDepthChart(teamId, playerId);
+
+    if (!this.injuredReserve[teamId]) this.injuredReserve[teamId] = [];
+    this.injuredReserve[teamId].push({
+      playerId: player.id,
+      player: player,
+      weekPlaced: this.currentWeek,
+      minWeeks: 4,
+    });
+
+    this._indexAddPlayer(player, teamId);
+    this.addNews(`${player.name} (${player.position}) placed on Injured Reserve by ${teamId}.`, 'injury');
+    return player;
+  }
+
+  activateFromIR(teamId, playerId) {
+    const irList = this.injuredReserve[teamId];
+    if (!irList) return null;
+    const idx = irList.findIndex(e => e.playerId === playerId);
+    if (idx === -1) return null;
+
+    const entry = irList[idx];
+    const weeksOnIR = this.currentWeek - entry.weekPlaced;
+    if (weeksOnIR < entry.minWeeks) return null; // not eligible yet
+
+    irList.splice(idx, 1);
+    const player = entry.player;
+
+    // Clear injury state
+    delete this.playerState[playerId];
+
+    // Re-add to active roster
+    if (!this.rosters[teamId]) this.rosters[teamId] = [];
+    this.rosters[teamId].push(player);
+    this._indexAddPlayer(player, teamId);
+    this.addToDepthChart(teamId, player);
+
+    this.addNews(`${player.name} (${player.position}) activated from Injured Reserve by ${teamId}.`, 'injury');
+    return player;
+  }
+
+  getIRList(teamId) {
+    const irList = this.injuredReserve[teamId] || [];
+    return irList.map(entry => ({
+      ...entry,
+      weeksOnIR: this.currentWeek - entry.weekPlaced,
+      eligible: (this.currentWeek - entry.weekPlaced) >= entry.minWeeks,
+      weeksUntilEligible: Math.max(0, entry.minWeeks - (this.currentWeek - entry.weekPlaced)),
+    }));
+  }
+
+  // --- CPU AUTO-MANAGEMENT ---
+  cpuManagePracticeSquadAndIR(teamId) {
+    // 1. Place heavily injured players (3+ weeks) on IR
+    const roster = this.rosters[teamId] || [];
+    const toIR = [];
+    roster.forEach(player => {
+      const state = this.playerState[player.id];
+      if (state && state.weeksOut >= 3) {
+        toIR.push(player.id);
+      }
+    });
+    toIR.forEach(pid => this.placeOnIR(teamId, pid));
+
+    // 2. Activate eligible IR players
+    const irList = this.getIRList(teamId);
+    irList.forEach(entry => {
+      if (entry.eligible) {
+        this.activateFromIR(teamId, entry.playerId);
+      }
+    });
+
+    // 3. If roster is thin at a position, promote from practice squad
+    const positions = ['QB', 'RB', 'WR', 'TE', 'OL', 'DL', 'LB', 'DB'];
+    const currentRoster = this.rosters[teamId] || [];
+    positions.forEach(pos => {
+      const posPlayers = currentRoster.filter(p => p.position === pos);
+      const healthyCount = posPlayers.filter(p => !this.playerState[p.id] || this.playerState[p.id].weeksOut <= 0).length;
+      if (healthyCount < 1) {
+        const ps = this.practiceSquads[teamId] || [];
+        const candidates = ps.filter(p => p.position === pos).sort((a, b) => b.overall - a.overall);
+        if (candidates.length > 0) {
+          this.promoteFromPracticeSquad(teamId, candidates[0].id);
+        }
+      }
+    });
+  }
+
   // TRADE SYSTEM
   calculatePlayerValue(player) {
     // Simple value formula based on overall, age, and position
@@ -1693,6 +1929,43 @@ export class LeagueEngine {
       Object.keys(this.rosters).forEach(teamId => {
           this.ensureDepthChart(teamId);
       });
+
+      // Clear all IR — activate everyone back to rosters for the new season
+      Object.keys(this.injuredReserve).forEach(teamId => {
+        const irList = this.injuredReserve[teamId] || [];
+        irList.forEach(entry => {
+          delete this.playerState[entry.playerId];
+          if (!this.rosters[teamId]) this.rosters[teamId] = [];
+          this.rosters[teamId].push(entry.player);
+          this.addToDepthChart(teamId, entry.player);
+        });
+        this.injuredReserve[teamId] = [];
+      });
+
+      // Age practice squad players, apply minor progression/retirement, replenish
+      Object.keys(this.practiceSquads).forEach(teamId => {
+        const ps = this.practiceSquads[teamId] || [];
+        const kept = [];
+        ps.forEach(p => {
+          p.age++;
+          if (p.age > 30 && Math.random() < 0.3) return; // released/retired
+          const change = Math.floor(Math.random() * 5) - 2; // -2 to +2
+          p.overall = Math.max(45, Math.min(75, p.overall + change));
+          kept.push(p);
+        });
+        this.practiceSquads[teamId] = kept;
+
+        // Replenish to 10 if below
+        let idx = 0;
+        while (this.practiceSquads[teamId].length < 10) {
+          const newPlayer = this._generatePracticeSquadPlayer(teamId, idx++);
+          this.practiceSquads[teamId].push(newPlayer);
+          this._indexAddPlayer(newPlayer, teamId);
+        }
+      });
+
+      // Rebuild index again after IR/PS changes
+      this.rebuildPlayerIndex();
   }
 
   // SAVE/LOAD GAME
@@ -1722,6 +1995,8 @@ export class LeagueEngine {
       depthCharts: this.depthCharts,
       gamePlans: this.gamePlans,
       draftHistory: this.draftHistory,
+      practiceSquads: this.practiceSquads,
+      injuredReserve: this.injuredReserve,
     };
   }
 
@@ -1751,6 +2026,8 @@ export class LeagueEngine {
     this.depthCharts = data.depthCharts || {};
     this.gamePlans = data.gamePlans || {};
     this.draftHistory = data.draftHistory || [];
+    this.practiceSquads = data.practiceSquads || {};
+    this.injuredReserve = data.injuredReserve || {};
     this._standingsDirty = true;
     this._cachedStandings = null;
     this.rebuildPlayerIndex();
@@ -1762,6 +2039,9 @@ export class LeagueEngine {
     if (!this.gamePlans || Object.keys(this.gamePlans).length === 0) {
       this.initializeGamePlans();
     }
+    // Ensure all teams have practice squads and IR (handles saves from before this feature)
+    this.initializePracticeSquads();
+    this.initializeInjuredReserve();
     return true;
   }
 
@@ -1798,6 +2078,8 @@ export class LeagueEngine {
     this.depthCharts = {};
     this.gamePlans = {};
     this.draftHistory = [];
+    this.practiceSquads = {};
+    this.injuredReserve = {};
     this._standingsDirty = true;
     this._cachedStandings = null;
     this.initializeStandings();
@@ -1807,6 +2089,8 @@ export class LeagueEngine {
     this.rebuildPlayerIndex();
     this.initializeDepthCharts();
     this.initializeGamePlans();
+    this.initializePracticeSquads();
+    this.initializeInjuredReserve();
   }
 }
 

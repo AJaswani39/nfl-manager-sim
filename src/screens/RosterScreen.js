@@ -208,6 +208,14 @@ export default function RosterScreen({ route }) {
             <Text style={styles.summaryValue}>{avgAge}</Text>
             <Text style={styles.summaryLabel}>Avg Age</Text>
           </View>
+          <View style={styles.summaryItem}>
+            <Text style={styles.summaryValue}>{league.getPracticeSquad(userTeamId).length}</Text>
+            <Text style={styles.summaryLabel}>PS</Text>
+          </View>
+          <View style={styles.summaryItem}>
+            <Text style={styles.summaryValue}>{league.getIRList(userTeamId).length}</Text>
+            <Text style={styles.summaryLabel}>IR</Text>
+          </View>
         </View>
       </View>
 

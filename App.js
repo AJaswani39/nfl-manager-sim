@@ -29,6 +29,7 @@ import GamePlanScreen from './src/screens/GamePlanScreen';
 import InjuryReportScreen from './src/screens/InjuryReportScreen';
 import TeamStatsScreen from './src/screens/TeamStatsScreen';
 import ContractScreen from './src/screens/ContractScreen';
+import PracticeSquadScreen from './src/screens/PracticeSquadScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -167,6 +168,11 @@ export default function App() {
           <Stack.Screen
             name="Contracts"
             component={withErrorBoundary(ContractScreen)}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="PracticeSquad"
+            component={withErrorBoundary(PracticeSquadScreen)}
             options={{ headerShown: false }}
           />
           <Stack.Screen

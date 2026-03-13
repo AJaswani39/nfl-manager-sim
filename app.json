@@ -25,6 +25,12 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "120ef64d-aefc-4ff1-beaf-f7053e11fbd0"
+      }
+    },
+    "owner": "ajaswani39-2-2"
   }
 }

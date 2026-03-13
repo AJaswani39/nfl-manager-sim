@@ -20,7 +20,8 @@ export default function MatchScreen({ route, navigation }) {
       league.getDepthChart(homeId),
       league.getDepthChart(awayId),
       league.getGamePlan(homeId),
-      league.getGamePlan(awayId)
+      league.getGamePlan(awayId),
+      userTeamId
   ));
   const engine = engineRef.current; // Shorthand
 

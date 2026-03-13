@@ -21,6 +21,17 @@ export default function InjuryReportScreen({ route, navigation }) {
   const loadInjuries = () => {
     const injuredPlayers = [];
 
+    // Check which players are on IR for quick lookup
+    const irPlayerSet = new Set();
+    const irEligibility = {};
+    Object.entries(league.injuredReserve || {}).forEach(([teamId, irList]) => {
+      const enriched = league.getIRList(teamId);
+      enriched.forEach(entry => {
+        irPlayerSet.add(entry.playerId);
+        irEligibility[entry.playerId] = entry;
+      });
+    });
+
     Object.entries(league.playerState).forEach(([playerId, state]) => {
       if (state && state.weeksOut > 0) {
         const playerInfo = league.findPlayer(playerId);
@@ -29,6 +40,8 @@ export default function InjuryReportScreen({ route, navigation }) {
         if (filter === 'my_team' && playerInfo.teamId !== userTeamId) return;
 
         const team = TEAMS.find(t => t.id === playerInfo.teamId);
+        const isOnIR = irPlayerSet.has(playerId);
+        const irInfo = irEligibility[playerId];
         injuredPlayers.push({
           id: playerId,
           name: playerInfo.name,
@@ -40,6 +53,9 @@ export default function InjuryReportScreen({ route, navigation }) {
           teamColor: team?.colors?.primary || '#555',
           weeksOut: state.weeksOut,
           isUserTeam: playerInfo.teamId === userTeamId,
+          isOnIR,
+          irWeeksUntilEligible: irInfo ? irInfo.weeksUntilEligible : 0,
+          irEligible: irInfo ? irInfo.eligible : false,
         });
       }
     });
@@ -71,6 +87,11 @@ export default function InjuryReportScreen({ route, navigation }) {
       <View style={styles.playerSection}>
         <View style={styles.topRow}>
           <Text style={styles.playerName}>{item.name}</Text>
+          {item.isOnIR && (
+            <View style={[styles.severityBadge, { backgroundColor: '#b71c1c', marginRight: 6 }]}>
+              <Text style={styles.severityText}>IR</Text>
+            </View>
+          )}
           <View style={[styles.severityBadge, { backgroundColor: getSeverityColor(item.weeksOut) }]}>
             <Text style={styles.severityText}>{getSeverityLabel(item.weeksOut)}</Text>
           </View>
@@ -81,7 +102,12 @@ export default function InjuryReportScreen({ route, navigation }) {
         </View>
         <View style={styles.timelineRow}>
           <Text style={styles.weeksText}>
-            {item.weeksOut} week{item.weeksOut !== 1 ? 's' : ''} remaining
+            {item.isOnIR
+              ? (item.irEligible
+                ? 'IR - Eligible to activate'
+                : `IR - ${item.irWeeksUntilEligible}w until eligible`)
+              : `${item.weeksOut} week${item.weeksOut !== 1 ? 's' : ''} remaining`
+            }
           </Text>
           <View style={styles.progressBar}>
             <View style={[styles.progressFill, {
