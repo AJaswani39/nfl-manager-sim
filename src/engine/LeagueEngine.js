@@ -13,7 +13,8 @@ const shuffle = (array) => {
 };
 
 export class LeagueEngine {
-  constructor() {
+  constructor(seed = Date.now()) {
+    this.setRandomSeed(seed);
     // Snapshot original TEAMS ratings so resetGame() can fully restore them
     this._originalTeamRatings = TEAMS.map(t => ({
       id: t.id,
@@ -55,6 +56,19 @@ export class LeagueEngine {
     this.initializeInjuredReserve();
   }
 
+  setRandomSeed(seed) {
+    const parsed = Number(seed);
+    this.randomSeed = Number.isFinite(parsed) ? parsed : Date.now();
+    // LCG state must be uint32 and non-zero for better distribution.
+    this._rngState = (this.randomSeed >>> 0) || 1;
+  }
+
+  _random() {
+    // Deterministic LCG RNG to support reproducible simulations.
+    this._rngState = (1664525 * this._rngState + 1013904223) >>> 0;
+    return this._rngState / 4294967296;
+  }
+
   // --- TRADE DEADLINE ---
   // Week 8 of regular season = internal week 11 (3 preseason + 8 regular)
   isTradeWindowOpen() {
@@ -78,8 +92,8 @@ export class LeagueEngine {
     TEAMS.forEach(team => {
       if (!this.gamePlans[team.id]) {
         this.gamePlans[team.id] = {
-          offense: offOptions[Math.floor(Math.random() * offOptions.length)],
-          defense: defOptions[Math.floor(Math.random() * defOptions.length)],
+          offense: offOptions[Math.floor(this._random() * offOptions.length)],
+          defense: defOptions[Math.floor(this._random() * defOptions.length)],
         };
       }
     });
@@ -191,7 +205,7 @@ export class LeagueEngine {
     const coachTypes = this.getCoachTypes();
     TEAMS.forEach(team => {
       // Assign random coach to each team initially
-      const randomType = coachTypes[Math.floor(Math.random() * coachTypes.length)];
+      const randomType = coachTypes[Math.floor(this._random() * coachTypes.length)];
       this.coaches[team.id] = randomType.id;
     });
   }
@@ -810,14 +824,14 @@ export class LeagueEngine {
 // ... existing code ...
 
   calculateScore(offenseTeam, defenseTeam) {
-    const base = Math.floor(Math.random() * 20);
+    const base = Math.floor(this._random() * 20);
     const matchUpDiff = (offenseTeam.ratings.offense - defenseTeam.ratings.defense) / 2;
     const planMod = this.getGamePlanScoreModifier(offenseTeam.id, defenseTeam.id);
     const offCoachBonus = this.getCoachBonus(offenseTeam.id, 'offense');
     const defCoachBonus = this.getCoachBonus(defenseTeam.id, 'defense');
     let score = 17 + base + matchUpDiff + planMod + offCoachBonus - defCoachBonus;
-    if (Math.random() > 0.95) score += 14;
-    if (Math.random() < 0.05) score = 0;
+    if (this._random() > 0.95) score += 14;
+    if (this._random() < 0.05) score = 0;
     return Math.max(0, Math.floor(score));
   }
 
@@ -848,12 +862,12 @@ export class LeagueEngine {
     let rushingTDs = 0;
 
     for (let i = 0; i < tds; i++) {
-      if (Math.random() > 0.4) passingTDs++; else rushingTDs++;
+      if (this._random() > 0.4) passingTDs++; else rushingTDs++;
     }
 
     // 2. Determine Yards (Approx 10-15 yards per point + base)
-    const totalYards = 150 + (score * 10) + Math.floor(Math.random() * 100);
-    const passingYards = Math.floor(totalYards * (0.6 + Math.random() * 0.2));
+    const totalYards = 150 + (score * 10) + Math.floor(this._random() * 100);
+    const passingYards = Math.floor(totalYards * (0.6 + this._random() * 0.2));
     const rushingYards = totalYards - passingYards;
 
     // 3. Assign to Players — starters get majority share
@@ -873,9 +887,9 @@ export class LeagueEngine {
           this.playerStats[rb.id].rushingYards += Math.max(0, remainingRush);
           this.playerStats[rb.id].rushingTDs += Math.max(0, remainingRushTD);
         } else {
-          const starterShare = idx === 0 ? (0.60 + Math.random() * 0.15) : (0.3 + Math.random() * 0.2);
+          const starterShare = idx === 0 ? (0.60 + this._random() * 0.15) : (0.3 + this._random() * 0.2);
           const share = Math.floor(remainingRush * starterShare);
-          const tdShare = remainingRushTD > 0 && (idx === 0 ? Math.random() > 0.3 : Math.random() > 0.6) ? 1 : 0;
+          const tdShare = remainingRushTD > 0 && (idx === 0 ? this._random() > 0.3 : this._random() > 0.6) ? 1 : 0;
           this.playerStats[rb.id].rushingYards += share;
           this.playerStats[rb.id].rushingTDs += tdShare;
           remainingRush -= share;
@@ -895,12 +909,12 @@ export class LeagueEngine {
         if (idx === wrs.length - 1) {
           share = Math.max(0, remainingPass);
         } else if (idx < starterShares.length) {
-          share = Math.floor(remainingPass * (starterShares[idx] + (Math.random() * 0.1 - 0.05)));
+          share = Math.floor(remainingPass * (starterShares[idx] + (this._random() * 0.1 - 0.05)));
         } else {
-          share = Math.floor(remainingPass * Math.random() * 0.3);
+          share = Math.floor(remainingPass * this._random() * 0.3);
         }
         share = Math.max(0, Math.min(share, remainingPass));
-        const tdShare = remainingPassTD > 0 && (idx === 0 ? Math.random() > 0.4 : Math.random() > 0.7) ? 1 : 0;
+        const tdShare = remainingPassTD > 0 && (idx === 0 ? this._random() > 0.4 : this._random() > 0.7) ? 1 : 0;
         this.playerStats[wr.id].receivingYards += share;
         this.playerStats[wr.id].receivingTDs += tdShare;
         remainingPass -= share;
@@ -1168,7 +1182,7 @@ export class LeagueEngine {
 
       // Simulate remaining games
       for (const m of remainingMatches) {
-        const winnerId = Math.random() < m.homeAdv ? m.homeId : m.awayId;
+        const winnerId = this._random() < m.homeAdv ? m.homeId : m.awayId;
         simWins[winnerId]++;
       }
 
@@ -1315,10 +1329,10 @@ export class LeagueEngine {
 
      this.draftClass = [];
      for(let i=0; i<60; i++) {
-         const pos = positions[Math.floor(Math.random() * positions.length)];
-         const overall = 65 + Math.floor(Math.random() * 25); // 65-90
+         const pos = positions[Math.floor(this._random() * positions.length)];
+         const overall = 65 + Math.floor(this._random() * 25); // 65-90
          // Weighted potential selection
-         const potRoll = Math.random();
+         const potRoll = this._random();
          let cumulative = 0;
          let potential = 'C';
          for (let j = 0; j < potentials.length; j++) {
@@ -1326,18 +1340,18 @@ export class LeagueEngine {
            if (potRoll < cumulative) { potential = potentials[j]; break; }
          }
          // Higher overall prospects tend to have better potential
-         if (overall >= 83 && Math.random() < 0.5) potential = potentials[Math.floor(Math.random() * 3)]; // A+, A, or B+
+         if (overall >= 83 && this._random() < 0.5) potential = potentials[Math.floor(this._random() * 3)]; // A+, A, or B+
          const posStrengths = strengthsByPos[pos] || ['Athleticism'];
-         const strength = posStrengths[Math.floor(Math.random() * posStrengths.length)];
+         const strength = posStrengths[Math.floor(this._random() * posStrengths.length)];
          const posComps = comparisons[pos] || ['Unknown'];
-         const comparison = posComps[Math.floor(Math.random() * posComps.length)];
+         const comparison = posComps[Math.floor(this._random() * posComps.length)];
 
          this.draftClass.push({
              id: `rookie_${Date.now()}_${i}`,
-             name: `${firstNames[Math.floor(Math.random()*firstNames.length)]} ${lastNames[Math.floor(Math.random()*lastNames.length)]}`,
+             name: `${firstNames[Math.floor(this._random()*firstNames.length)]} ${lastNames[Math.floor(this._random()*lastNames.length)]}`,
              position: pos,
              overall: overall,
-             age: 21 + Math.floor(Math.random()*3),
+             age: 21 + Math.floor(this._random()*3),
              potential: potential,
              strength: strength,
              comparison: comparison,
@@ -1422,13 +1436,13 @@ export class LeagueEngine {
     
     const newFAs = [];
     for (let i = 0; i < 15; i++) {
-      const pos = positions[Math.floor(Math.random() * positions.length)];
-      const rating = 60 + Math.floor(Math.random() * 25); // 60-85 range (veterans)
-      const age = 26 + Math.floor(Math.random() * 8); // 26-33 range
+      const pos = positions[Math.floor(this._random() * positions.length)];
+      const rating = 60 + Math.floor(this._random() * 25); // 60-85 range (veterans)
+      const age = 26 + Math.floor(this._random() * 8); // 26-33 range
       
       newFAs.push({
         id: `fa_${Date.now()}_${i}`,
-        name: `${firstNames[Math.floor(Math.random() * firstNames.length)]} ${lastNames[Math.floor(Math.random() * lastNames.length)]}`,
+        name: `${firstNames[Math.floor(this._random() * firstNames.length)]} ${lastNames[Math.floor(this._random() * lastNames.length)]}`,
         position: pos,
         overall: rating,
         age: age,
@@ -1500,12 +1514,12 @@ export class LeagueEngine {
       if (this.practiceSquads[team.id] && this.practiceSquads[team.id].length > 0) return;
       this.practiceSquads[team.id] = [];
       for (let i = 0; i < 10; i++) {
-        const pos = positions[Math.floor(Math.random() * positions.length)];
-        const overall = 50 + Math.floor(Math.random() * 23); // 50-72
-        const age = 22 + Math.floor(Math.random() * 6); // 22-27
+        const pos = positions[Math.floor(this._random() * positions.length)];
+        const overall = 50 + Math.floor(this._random() * 23); // 50-72
+        const age = 22 + Math.floor(this._random() * 6); // 22-27
         const player = {
           id: `ps_${team.id}_${Date.now()}_${i}`,
-          name: `${firstNames[Math.floor(Math.random() * firstNames.length)]} ${lastNames[Math.floor(Math.random() * lastNames.length)]}`,
+          name: `${firstNames[Math.floor(this._random() * firstNames.length)]} ${lastNames[Math.floor(this._random() * lastNames.length)]}`,
           position: pos,
           overall,
           age,
@@ -1523,12 +1537,12 @@ export class LeagueEngine {
                         'Jordan', 'Sam', 'Trey', 'Jalen', 'Darius', 'Marcus', 'Terrell', 'DeShawn', 'Malik', 'Andre'];
     const lastNames = ['Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis', 'Rodriguez', 'Martinez', 'Anderson',
                        'Thomas', 'Jackson', 'White', 'Harris', 'Thompson', 'Clark', 'Lewis', 'Robinson', 'Walker', 'Hall'];
-    const pos = positions[Math.floor(Math.random() * positions.length)];
-    const overall = 50 + Math.floor(Math.random() * 23);
-    const age = 22 + Math.floor(Math.random() * 6);
+    const pos = positions[Math.floor(this._random() * positions.length)];
+    const overall = 50 + Math.floor(this._random() * 23);
+    const age = 22 + Math.floor(this._random() * 6);
     return {
       id: `ps_${teamId}_${Date.now()}_${index}`,
-      name: `${firstNames[Math.floor(Math.random() * firstNames.length)]} ${lastNames[Math.floor(Math.random() * lastNames.length)]}`,
+      name: `${firstNames[Math.floor(this._random() * firstNames.length)]} ${lastNames[Math.floor(this._random() * lastNames.length)]}`,
       position: pos,
       overall,
       age,
@@ -1831,7 +1845,7 @@ export class LeagueEngine {
               // QBs, Ks, Ps play longer
               if (['QB', 'K', 'P'].includes(p.position)) retireChance *= 0.5;
 
-              if (Math.random() < retireChance) {
+              if (this._random() < retireChance) {
                   this.addNews(`${p.name} (${p.position}) has retired after ${p.age - 21} seasons.`, 'retire');
               } else {
                   let effectiveAge = p.age;
@@ -1840,19 +1854,19 @@ export class LeagueEngine {
 
                   let change = 0;
                   if (effectiveAge < 25) {
-                      change = Math.floor(Math.random() * 4) + 1;
+                      change = Math.floor(this._random() * 4) + 1;
                   } else if (effectiveAge < 28) {
-                      change = Math.floor(Math.random() * 3);
+                      change = Math.floor(this._random() * 3);
                   } else if (effectiveAge < 31) {
-                      change = Math.floor(Math.random() * 3) - 1;
+                      change = Math.floor(this._random() * 3) - 1;
                   } else if (effectiveAge < 34) {
-                      change = -(Math.floor(Math.random() * 3) + 1);
+                      change = -(Math.floor(this._random() * 3) + 1);
                   } else {
-                      change = -(Math.floor(Math.random() * 4) + 2);
+                      change = -(Math.floor(this._random() * 4) + 2);
                   }
 
                   if (devBonus > 0 && p.age < 26) {
-                      change += Math.floor(Math.random() * (devBonus + 1));
+                      change += Math.floor(this._random() * (devBonus + 1));
                   }
 
                   const stats = this.playerStats[p.id];
@@ -1862,7 +1876,7 @@ export class LeagueEngine {
                       if (['RB'].includes(p.position) && ((stats.rushingYards || 0) > 700 || (stats.rushingTDs || 0) > 5)) performed = true;
                       if (['WR', 'TE'].includes(p.position) && ((stats.receivingYards || 0) > 500 || (stats.receivingTDs || 0) > 4)) performed = true;
                       if (['DL', 'LB', 'DB', 'CB', 'S'].includes(p.position) && ((stats.tackles || 0) > 40 || (stats.sacks || 0) > 5)) performed = true;
-                      if (performed) change += Math.floor(Math.random() * 2) + 1;
+                      if (performed) change += Math.floor(this._random() * 2) + 1;
                   }
 
                   // Potential drives upside — decline is unaffected
@@ -1948,8 +1962,8 @@ export class LeagueEngine {
         const kept = [];
         ps.forEach(p => {
           p.age++;
-          if (p.age > 30 && Math.random() < 0.3) return; // released/retired
-          const change = Math.floor(Math.random() * 5) - 2; // -2 to +2
+          if (p.age > 30 && this._random() < 0.3) return; // released/retired
+          const change = Math.floor(this._random() * 5) - 2; // -2 to +2
           p.overall = Math.max(45, Math.min(75, p.overall + change));
           kept.push(p);
         });
@@ -1997,6 +2011,8 @@ export class LeagueEngine {
       draftHistory: this.draftHistory,
       practiceSquads: this.practiceSquads,
       injuredReserve: this.injuredReserve,
+      randomSeed: this.randomSeed,
+      rngState: this._rngState,
     };
   }
 
@@ -2028,6 +2044,10 @@ export class LeagueEngine {
     this.draftHistory = data.draftHistory || [];
     this.practiceSquads = data.practiceSquads || {};
     this.injuredReserve = data.injuredReserve || {};
+    this.setRandomSeed(data.randomSeed || Date.now());
+    if (Number.isFinite(data.rngState)) {
+      this._rngState = (data.rngState >>> 0) || 1;
+    }
     this._standingsDirty = true;
     this._cachedStandings = null;
     this.rebuildPlayerIndex();
