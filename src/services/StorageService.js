@@ -4,6 +4,7 @@ import { league } from '../engine/LeagueEngine';
 
 const INDEX_KEY = '@nfl_manager_index';
 const LEGACY_KEY = '@nfl_manager_save';
+const SAVE_SCHEMA_VERSION = 2;
 const slotKey = (slotId) => `@nfl_manager_save_slot_${slotId}`;
 
 const emptyIndex = () => ({ slots: { 1: null, 2: null, 3: null } });
@@ -18,7 +19,12 @@ function buildSlotMeta(slotId, leagueData) {
     currentWeek: leagueData.currentWeek || 1,
     phase: leagueData.phase || 'preseason',
     lastSaved: Date.now(),
+    schemaVersion: leagueData.schemaVersion || SAVE_SCHEMA_VERSION,
   };
+}
+
+function withSchema(leagueData) {
+  return { schemaVersion: SAVE_SCHEMA_VERSION, ...leagueData };
 }
 
 export const StorageService = {
@@ -57,7 +63,8 @@ export const StorageService = {
 
   async saveSlot(slotId, leagueData) {
     try {
-      await AsyncStorage.setItem(slotKey(slotId), JSON.stringify(leagueData));
+      const payload = withSchema(leagueData);
+      await AsyncStorage.setItem(slotKey(slotId), JSON.stringify(payload));
       // Read raw index directly to avoid triggering migration inside a save
       let index;
       try {
@@ -66,7 +73,7 @@ export const StorageService = {
       } catch {
         index = emptyIndex();
       }
-      index.slots[slotId] = buildSlotMeta(slotId, leagueData);
+      index.slots[slotId] = buildSlotMeta(slotId, payload);
       await AsyncStorage.setItem(INDEX_KEY, JSON.stringify(index));
       return { success: true };
     } catch (error) {
@@ -78,7 +85,7 @@ export const StorageService = {
   async loadSlot(slotId) {
     try {
       const raw = await AsyncStorage.getItem(slotKey(slotId));
-      if (raw !== null) return { success: true, data: JSON.parse(raw) };
+      if (raw !== null) return { success: true, data: withSchema(JSON.parse(raw)) };
       return { success: false, error: 'No save in this slot' };
     } catch (error) {
       console.error('Error loading slot:', error);
