@@ -59,13 +59,6 @@ export class MatchEngine {
 
     this.performCoinToss();
     
-    // DEBUG: Verify Rosters
-    if (this.homeRoster.length > 0) {
-        this.addToLog(`[DEBUG] Home (${homeTeam.id}): ${this.homeRoster[0].name}`);
-    }
-    if (this.awayRoster.length > 0) {
-        this.addToLog(`[DEBUG] Away (${awayTeam.id}): ${this.awayRoster[0].name}`);
-    }
   }
 
   isInjured(pid) {
@@ -124,7 +117,8 @@ export class MatchEngine {
       
       // 1. AUDIBLE (User Offense Only for now)
       // 5% chance if it's a normal play
-      if (Math.random() < 0.05 && offChoice) {
+      const userIsOnOffense = this._userSide && this.state.possession === this._userSide;
+      if (userIsOnOffense && Math.random() < 0.05 && offChoice) {
           this.state.pendingEvent = {
               type: 'AUDIBLE',
               title: 'Quarterback Audible',
@@ -141,7 +135,7 @@ export class MatchEngine {
       // 2. FALSE START (Offense Penalty)
       // 3% chance
       if (Math.random() < 0.03) {
-          this.state.ballOn -= 5;
+          this.state.ballOn = Math.max(1, this.state.ballOn - 5);
           this.state.distance += 5;
           this.addToLog("FALSE START! Offense pushed back 5 yards.");
           // No choice, just a notification interruption? 
@@ -159,7 +153,7 @@ export class MatchEngine {
       // 3% chance
       if (Math.random() < 0.03) {
           this.addToLog("ENCROACHMENT! Defense jumps offside. 5 yards.");
-          this.state.ballOn += 5;
+          this.state.ballOn = Math.min(99, this.state.ballOn + 5);
           this.state.distance -= 5;
           
           if (this.state.distance <= 0) {
