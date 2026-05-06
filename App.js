@@ -1,8 +1,10 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import withErrorBoundary from './src/components/withErrorBoundary';
+import { league } from './src/engine/LeagueEngine';
+import { StorageService } from './src/services/StorageService';
 import HomeScreen from './src/screens/HomeScreen';
 import TeamDetailScreen from './src/screens/TeamDetailScreen';
 
@@ -84,6 +86,30 @@ const fullscreenRoutes = [
 ];
 
 export default function App() {
+  useEffect(() => {
+    const saveCurrentSlot = () => {
+      if (league.userTeamId && league.slotId) {
+        StorageService.saveGame(league.getSaveData());
+      }
+    };
+
+    if (typeof window === 'undefined' || !window.addEventListener) return undefined;
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') saveCurrentSlot();
+    };
+
+    window.addEventListener('pagehide', saveCurrentSlot);
+    window.addEventListener('beforeunload', saveCurrentSlot);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener('pagehide', saveCurrentSlot);
+      window.removeEventListener('beforeunload', saveCurrentSlot);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
+
   return (
     <ErrorBoundary>
       <NavigationContainer>

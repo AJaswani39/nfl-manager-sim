@@ -111,16 +111,16 @@ export class LeagueEngine {
     const plan = this.getGamePlan(teamId);
     // Offense weights: [runInside, runOutside, passShort, passDeep, screen, playAction, draw]
     const offenseWeights = {
-      run_heavy:  { run: 0.55, shortPass: 0.25, deepPass: 0.10, screen: 0.05, playAction: 0.03, draw: 0.02 },
-      balanced:   { run: 0.35, shortPass: 0.30, deepPass: 0.15, screen: 0.08, playAction: 0.07, draw: 0.05 },
-      pass_heavy: { run: 0.15, shortPass: 0.35, deepPass: 0.25, screen: 0.12, playAction: 0.08, draw: 0.05 },
-      spread:     { run: 0.20, shortPass: 0.25, deepPass: 0.20, screen: 0.15, playAction: 0.12, draw: 0.08 },
+      run_heavy:  { run: 0.52, shortPass: 0.18, deepPass: 0.07, screen: 0.06, playAction: 0.12, draw: 0.05 },
+      balanced:   { run: 0.34, shortPass: 0.25, deepPass: 0.14, screen: 0.09, playAction: 0.11, draw: 0.07 },
+      pass_heavy: { run: 0.14, shortPass: 0.30, deepPass: 0.24, screen: 0.11, playAction: 0.12, draw: 0.09 },
+      spread:     { run: 0.17, shortPass: 0.24, deepPass: 0.15, screen: 0.19, playAction: 0.11, draw: 0.14 },
     };
     const defenseWeights = {
-      aggressive:   { runDef: 0.30, coverage: 0.35, blitz: 0.35 },
-      balanced:     { runDef: 0.35, coverage: 0.40, blitz: 0.25 },
-      conservative: { runDef: 0.40, coverage: 0.45, blitz: 0.15 },
-      blitz_heavy:  { runDef: 0.20, coverage: 0.35, blitz: 0.45 },
+      aggressive:   { runDef: 0.26, coverage: 0.32, blitz: 0.42 },
+      balanced:     { runDef: 0.34, coverage: 0.42, blitz: 0.24 },
+      conservative: { runDef: 0.32, coverage: 0.56, blitz: 0.12 },
+      blitz_heavy:  { runDef: 0.18, coverage: 0.25, blitz: 0.57 },
     };
     return {
       offense: offenseWeights[plan.offense] || offenseWeights.balanced,
@@ -132,14 +132,19 @@ export class LeagueEngine {
     const offPlan = this.getGamePlan(offTeamId);
     const defPlan = this.getGamePlan(defTeamId);
     let mod = 0;
-    // Offensive tendencies
-    if (offPlan.offense === 'run_heavy') mod += 1;
-    if (offPlan.offense === 'pass_heavy') mod += 2;
-    if (offPlan.offense === 'spread') mod += 1.5;
-    // Matchup adjustments: blitz_heavy is weak vs spread/screen-heavy offenses
-    if (defPlan.defense === 'blitz_heavy' && (offPlan.offense === 'spread' || offPlan.offense === 'pass_heavy')) mod += 2;
-    if (defPlan.defense === 'conservative' && offPlan.offense === 'run_heavy') mod -= 2;
-    if (defPlan.defense === 'aggressive' && offPlan.offense === 'balanced') mod -= 1;
+    if (offPlan.offense === 'run_heavy') mod += 0.5;
+    if (offPlan.offense === 'pass_heavy') mod += 1.0;
+    if (offPlan.offense === 'spread') mod += 0.75;
+
+    if (defPlan.defense === 'blitz_heavy') mod -= 0.5;
+    if (defPlan.defense === 'conservative') mod -= 0.75;
+    if (defPlan.defense === 'aggressive') mod -= 0.25;
+
+    if (defPlan.defense === 'blitz_heavy' && offPlan.offense === 'spread') mod += 2.0;
+    if (defPlan.defense === 'blitz_heavy' && offPlan.offense === 'pass_heavy') mod += 0.75;
+    if (defPlan.defense === 'conservative' && offPlan.offense === 'run_heavy') mod += 1.25;
+    if (defPlan.defense === 'aggressive' && offPlan.offense === 'balanced') mod -= 0.75;
+    if (defPlan.defense === 'balanced' && offPlan.offense === 'spread') mod -= 0.5;
     return mod;
   }
 
@@ -1142,28 +1147,46 @@ export class LeagueEngine {
   // Calculate Probability (Monte Carlo Lite)
   // We run 50 simulations of the remaining season
   calculatePlayoffOdds() {
-    if (this.currentWeek > 17) return {}; // Season over, odds are 100% or 0%
-
     const SIMULATIONS = 50;
     const teamPlayoffCounts = {};
     TEAMS.forEach(t => teamPlayoffCounts[t.id] = 0);
+    const totalRegularWeeks = 3 + 17;
+
+    if (this.phase === 'playoffs' || this.phase === 'offseason' || this.currentWeek > totalRegularWeeks) {
+      const picture = this.getPlayoffPicture();
+      [...picture.AFC, ...picture.NFC].forEach(team => {
+        if (team) teamPlayoffCounts[team.id] = SIMULATIONS;
+      });
+
+      const lockedOdds = {};
+      Object.keys(teamPlayoffCounts).forEach(id => {
+        lockedOdds[id] = Math.round((teamPlayoffCounts[id] / SIMULATIONS) * 100);
+      });
+      return lockedOdds;
+    }
+
+    if (this.phase !== 'regular') return {};
 
     // Snapshot only the fields the simulation actually uses (w, l)
     // Avoids 50x JSON.parse(JSON.stringify()) of the full standings with match arrays
-    const baseWins = {};
-    const baseLosses = {};
+    const baseRecords = {};
     for (const teamId of Object.keys(this.standings)) {
-      baseWins[teamId] = this.standings[teamId].w;
-      baseLosses[teamId] = this.standings[teamId].l;
+      baseRecords[teamId] = {
+        w: this.standings[teamId].w,
+        l: this.standings[teamId].l,
+        pf: this.standings[teamId].pf,
+        pa: this.standings[teamId].pa,
+      };
     }
 
     // Pre-collect remaining matches once instead of re-reading this.weeks per sim
     const startWeek = this.currentWeek;
     const remainingMatches = [];
-    for (let w = startWeek; w <= 17; w++) {
+    for (let w = startWeek; w <= totalRegularWeeks; w++) {
       const weekMatches = this.weeks[w - 1];
       if (!weekMatches) continue;
       for (const match of weekMatches) {
+        if (match.played || match.isPreseason) continue;
         remainingMatches.push({
           homeId: match.home.id,
           awayId: match.away.id,
@@ -1175,25 +1198,44 @@ export class LeagueEngine {
     // Pre-split TEAMS by conference once
     const afcTeams = TEAMS.filter(t => t.conference === 'AFC');
     const nfcTeams = TEAMS.filter(t => t.conference === 'NFC');
+    const getSeeds = (teams, records) => {
+      const divisions = { East: [], North: [], South: [], West: [] };
+      teams.forEach(team => {
+        const record = records[team.id] || { w: 0, l: 0, pf: 0, pa: 0 };
+        divisions[team.division].push({ ...team, ...record });
+      });
+
+      const sortTeams = (a, b) => b.w - a.w || (b.pf - b.pa) - (a.pf - a.pa);
+      const winners = [];
+      const wildCards = [];
+      Object.values(divisions).forEach(div => {
+        div.sort(sortTeams);
+        if (div[0]) winners.push(div[0]);
+        for (let i = 1; i < div.length; i++) wildCards.push(div[i]);
+      });
+
+      winners.sort(sortTeams);
+      wildCards.sort(sortTeams);
+      return [...winners, ...wildCards].slice(0, 7);
+    };
 
     for (let sim = 0; sim < SIMULATIONS; sim++) {
-      // Shallow-copy only wins per team (2 integer copies × 32 teams)
-      const simWins = { ...baseWins };
+      const simRecords = {};
+      Object.keys(baseRecords).forEach(teamId => {
+        simRecords[teamId] = { ...baseRecords[teamId] };
+      });
 
       // Simulate remaining games
       for (const m of remainingMatches) {
-        const winnerId = this._random() < m.homeAdv ? m.homeId : m.awayId;
-        simWins[winnerId]++;
+        const homeWon = Math.random() < m.homeAdv;
+        const winnerId = homeWon ? m.homeId : m.awayId;
+        const loserId = homeWon ? m.awayId : m.homeId;
+        simRecords[winnerId].w++;
+        simRecords[loserId].l++;
       }
 
-      // Determine top 7 per conference by wins
-      const afcSorted = afcTeams.map(t => ({ id: t.id, w: simWins[t.id] }))
-        .sort((a, b) => b.w - a.w);
-      const nfcSorted = nfcTeams.map(t => ({ id: t.id, w: simWins[t.id] }))
-        .sort((a, b) => b.w - a.w);
-
-      for (let i = 0; i < 7 && i < afcSorted.length; i++) teamPlayoffCounts[afcSorted[i].id]++;
-      for (let i = 0; i < 7 && i < nfcSorted.length; i++) teamPlayoffCounts[nfcSorted[i].id]++;
+      getSeeds(afcTeams, simRecords).forEach(team => teamPlayoffCounts[team.id]++);
+      getSeeds(nfcTeams, simRecords).forEach(team => teamPlayoffCounts[team.id]++);
     }
 
     // Convert to Percentages
@@ -1328,7 +1370,8 @@ export class LeagueEngine {
      };
 
      this.draftClass = [];
-     for(let i=0; i<60; i++) {
+     const prospectCount = TEAMS.length * 3;
+     for(let i=0; i<prospectCount; i++) {
          const pos = positions[Math.floor(this._random() * positions.length)];
          const overall = 65 + Math.floor(this._random() * 25); // 65-90
          // Weighted potential selection
@@ -1381,7 +1424,11 @@ export class LeagueEngine {
      
      // Generate Order (Reverse Standings)
      const sortedTeams = this.getStandingsSorted().reverse(); // Worst teams first
-     this.draftOrder = sortedTeams.map(t => t.id);
+     const baseOrder = sortedTeams.map(t => t.id);
+     this.draftOrder = [];
+     for (let round = 0; round < 3; round++) {
+       this.draftOrder.push(...baseOrder);
+     }
      this.currentPickIndex = 0;
   }
 
@@ -1980,6 +2027,10 @@ export class LeagueEngine {
 
       // Rebuild index again after IR/PS changes
       this.rebuildPlayerIndex();
+
+      this.draftClass = null;
+      this.draftOrder = null;
+      this.currentPickIndex = 0;
   }
 
   // SAVE/LOAD GAME

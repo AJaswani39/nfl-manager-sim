@@ -16,6 +16,52 @@ export const DEFENSE_TYPES = {
   BLITZ: 'BLITZ',
 };
 
+const OFFENSIVE_SCHEME_WEIGHTS = {
+  run_heavy: {
+    insideRun: 0.34,
+    outsideRun: 0.18,
+    shortPass: 0.18,
+    deepPass: 0.07,
+    screen: 0.06,
+    playAction: 0.12,
+    draw: 0.05,
+  },
+  balanced: {
+    insideRun: 0.20,
+    outsideRun: 0.14,
+    shortPass: 0.25,
+    deepPass: 0.14,
+    screen: 0.09,
+    playAction: 0.11,
+    draw: 0.07,
+  },
+  pass_heavy: {
+    insideRun: 0.08,
+    outsideRun: 0.06,
+    shortPass: 0.30,
+    deepPass: 0.24,
+    screen: 0.11,
+    playAction: 0.12,
+    draw: 0.09,
+  },
+  spread: {
+    insideRun: 0.08,
+    outsideRun: 0.09,
+    shortPass: 0.24,
+    deepPass: 0.15,
+    screen: 0.19,
+    playAction: 0.11,
+    draw: 0.14,
+  },
+};
+
+const DEFENSIVE_SCHEME_WEIGHTS = {
+  aggressive: { runDef: 0.26, coverage: 0.32, blitz: 0.42 },
+  balanced: { runDef: 0.34, coverage: 0.42, blitz: 0.24 },
+  conservative: { runDef: 0.32, coverage: 0.56, blitz: 0.12 },
+  blitz_heavy: { runDef: 0.18, coverage: 0.25, blitz: 0.57 },
+};
+
 
 export class MatchEngine {
   constructor(homeTeam, awayTeam, homeRoster, awayRoster, isPlayoff = false, injuries = {}, homeDepthChart = null, awayDepthChart = null, homeGamePlan = null, awayGamePlan = null, userTeamId = null) {
@@ -49,6 +95,10 @@ export class MatchEngine {
     this.awayDepthChart = awayDepthChart;
     this.homeGamePlan = homeGamePlan;
     this.awayGamePlan = awayGamePlan;
+    this.offensivePlayHistory = {
+      home: [],
+      away: [],
+    };
 
     // Pre-group players by position role once, instead of filtering on every getPlayer() call.
     // This turns ~2,500 filter operations per game into ~12 upfront filters + O(1) lookups.
@@ -458,26 +508,14 @@ export class MatchEngine {
   chooseAIOffensePlay(side) {
     const plan = side === 'home' ? this.homeGamePlan : this.awayGamePlan;
     const w = plan?.offense || null;
-    // Default weights if no game plan
-    const weights = w ? {
-      run_heavy:  { run: 0.55, shortPass: 0.25, deepPass: 0.10, screen: 0.05, playAction: 0.03, draw: 0.02 },
-      balanced:   { run: 0.35, shortPass: 0.30, deepPass: 0.15, screen: 0.08, playAction: 0.07, draw: 0.05 },
-      pass_heavy: { run: 0.15, shortPass: 0.35, deepPass: 0.25, screen: 0.12, playAction: 0.08, draw: 0.05 },
-      spread:     { run: 0.20, shortPass: 0.25, deepPass: 0.20, screen: 0.15, playAction: 0.12, draw: 0.08 },
-    }[w] : null;
-
-    if (!weights) {
-      // Fallback: old hardcoded distribution
-      const roll = Math.random();
-      if (roll < 0.4) return PLAY_TYPES.RUN_INSIDE;
-      if (roll < 0.7) return PLAY_TYPES.PASS_SHORT;
-      return PLAY_TYPES.PASS_DEEP;
-    }
+    const weights = OFFENSIVE_SCHEME_WEIGHTS[w] || OFFENSIVE_SCHEME_WEIGHTS.balanced;
 
     const roll = Math.random();
     let cumulative = 0;
-    cumulative += weights.run;
-    if (roll < cumulative) return Math.random() < 0.6 ? PLAY_TYPES.RUN_INSIDE : PLAY_TYPES.RUN_OUTSIDE;
+    cumulative += weights.insideRun;
+    if (roll < cumulative) return PLAY_TYPES.RUN_INSIDE;
+    cumulative += weights.outsideRun;
+    if (roll < cumulative) return PLAY_TYPES.RUN_OUTSIDE;
     cumulative += weights.shortPass;
     if (roll < cumulative) return PLAY_TYPES.PASS_SHORT;
     cumulative += weights.deepPass;
@@ -492,19 +530,8 @@ export class MatchEngine {
   chooseAIDefensePlay(side) {
     const plan = side === 'home' ? this.homeGamePlan : this.awayGamePlan;
     const w = plan?.defense || null;
-    const weights = w ? {
-      aggressive:   { runDef: 0.30, coverage: 0.35, blitz: 0.35 },
-      balanced:     { runDef: 0.35, coverage: 0.40, blitz: 0.25 },
-      conservative: { runDef: 0.40, coverage: 0.45, blitz: 0.15 },
-      blitz_heavy:  { runDef: 0.20, coverage: 0.35, blitz: 0.45 },
-    }[w] : null;
-
-    if (!weights) {
-      const roll = Math.random();
-      if (roll < 0.4) return DEFENSE_TYPES.RUN_DEFENSE;
-      if (roll < 0.8) return DEFENSE_TYPES.PASS_COVERAGE;
-      return DEFENSE_TYPES.BLITZ;
-    }
+    let weights = DEFENSIVE_SCHEME_WEIGHTS[w] || DEFENSIVE_SCHEME_WEIGHTS.balanced;
+    weights = this.getAdaptiveDefenseWeights(weights);
 
     const roll = Math.random();
     let cumulative = 0;
@@ -513,6 +540,48 @@ export class MatchEngine {
     cumulative += weights.coverage;
     if (roll < cumulative) return DEFENSE_TYPES.PASS_COVERAGE;
     return DEFENSE_TYPES.BLITZ;
+  }
+
+  getAdaptiveDefenseWeights(baseWeights) {
+    const offenseSide = this.state.possession;
+    const recent = this.offensivePlayHistory[offenseSide] || [];
+    const lastSix = recent.slice(-6);
+    if (lastSix.length < 3) return baseWeights;
+
+    const runCount = lastSix.filter(p => p.includes('RUN')).length;
+    const drawCount = lastSix.filter(p => p === PLAY_TYPES.RUN_DRAW).length;
+    const passCount = lastSix.filter(p => p.includes('PASS')).length;
+
+    let weights = { ...baseWeights };
+    if (drawCount >= 2) {
+      weights.runDef += 0.22;
+      weights.blitz += 0.12;
+      weights.coverage = Math.max(0.10, weights.coverage - 0.34);
+    } else if (runCount >= 4) {
+      weights.runDef += 0.20;
+      weights.blitz += 0.05;
+      weights.coverage = Math.max(0.12, weights.coverage - 0.25);
+    } else if (passCount >= 4) {
+      weights.coverage += 0.18;
+      weights.blitz += 0.08;
+      weights.runDef = Math.max(0.12, weights.runDef - 0.26);
+    }
+
+    const total = weights.runDef + weights.coverage + weights.blitz;
+    return {
+      runDef: weights.runDef / total,
+      coverage: weights.coverage / total,
+      blitz: weights.blitz / total,
+    };
+  }
+
+  trackOffensivePlay(offChoice) {
+    if (!offChoice || offChoice === PLAY_TYPES.PUNT || offChoice === PLAY_TYPES.FG) return;
+    const side = this.state.possession;
+    this.offensivePlayHistory[side].push(offChoice);
+    if (this.offensivePlayHistory[side].length > 12) {
+      this.offensivePlayHistory[side].shift();
+    }
   }
 
   getPlayer(teamType, positionGroup) {
@@ -584,7 +653,7 @@ export class MatchEngine {
               passingYards: 0, passingTDs: 0, passingAtt: 0, passingComp: 0,
               rushingYards: 0, rushingTDs: 0, rushingAtt: 0,
               receivingYards: 0, receivingTDs: 0, receptions: 0,
-              tackles: 0, sacks: 0, interceptions: 0
+              tackles: 0, sacks: 0, interceptions: 0, defTDs: 0, fumblesRecovered: 0
           };
       }
       const s = this.playerStats[player.id];
@@ -593,6 +662,7 @@ export class MatchEngine {
 
   resolvePlay(offChoice, defChoice) {
     if (this.state.gameOver) return;
+    this.trackOffensivePlay(offChoice);
 
     const off = this.getOffenseTeam();
     const def = this.getDefenseTeam();
@@ -669,14 +739,44 @@ export class MatchEngine {
       case PLAY_TYPES.RUN_DRAW:
         this.recordStat(rb, 'rushingAtt', 1);
         if (defChoice === DEFENSE_TYPES.PASS_COVERAGE) {
-           yardsGained = Math.floor(Math.random() * 10) + 5;
-           description = `Draw play wide open for ${rb.name}!`;
+           if (Math.random() < 0.12) {
+             yardsGained = Math.floor(Math.random() * 4) - 2;
+             description = `${lb.name} diagnoses the draw late and drags down ${rb.name}.`;
+             this.recordStat(lb, 'tackles', 1);
+           } else {
+             yardsGained = Math.floor(Math.random() * 9) + 3;
+             description = `Draw play opens up for ${rb.name}.`;
+           }
         } else if (defChoice === DEFENSE_TYPES.BLITZ) {
-           yardsGained = -2; description = `${dl.name} blows up the draw play.`;
+           yardsGained = Math.floor(Math.random() * 5) - 5;
+           description = `${dl.name} crashes down and blows up the draw play.`;
            this.recordStat(dl, 'tackles', 1);
+           if (Math.random() < 0.08) {
+              if (Math.random() < 0.45) {
+                  turnover = true;
+                  turnoverPlayer = dl;
+                  description = `FUMBLE! ${dl.name} punches it loose on the draw and recovers!`;
+                  this.recordStat(dl, 'fumblesRecovered', 1);
+              } else {
+                  description = `FUMBLE! ${rb.name} loses it on the draw but falls back on the ball.`;
+                  yardsGained = Math.min(yardsGained, -2);
+              }
+           }
         } else {
-           yardsGained = 1; description = `${rb.name} swallowed up by ${tackler.name}.`;
+           yardsGained = Math.floor(Math.random() * 5) - 2;
+           description = `${rb.name} swallowed up by ${tackler.name} on the draw.`;
            this.recordStat(tackler, 'tackles', 1);
+           if (Math.random() < 0.05) {
+              if (Math.random() < 0.35) {
+                  turnover = true;
+                  turnoverPlayer = tackler;
+                  description = `FUMBLE! ${tackler.name} rips it out from ${rb.name} and recovers!`;
+                  this.recordStat(tackler, 'fumblesRecovered', 1);
+              } else {
+                  description = `FUMBLE! ${rb.name} briefly loses the draw handoff but recovers.`;
+                  yardsGained = 0;
+              }
+           }
         }
         break;
 
@@ -700,8 +800,19 @@ export class MatchEngine {
              }
           }
         } else if (defChoice === DEFENSE_TYPES.BLITZ) {
-          yardsGained = Math.floor(Math.random() * 10) + 4; description = `${qb.name} hits ${wr.name} on the slant vs Blitz.`;
-          this.recordStat(qb, 'passingComp', 1); this.recordStat(wr, 'receptions', 1);
+          if (Math.random() < 0.18) {
+             yardsGained = -5; description = `SACK! ${dl.name} gets home before the short route develops.`;
+             this.recordStat(dl, 'sacks', 1);
+             if (Math.random() < 0.12) {
+                turnover = true;
+                turnoverPlayer = dl;
+                description = `STRIP SACK! ${dl.name} knocks it loose and recovers!`;
+                this.recordStat(dl, 'fumblesRecovered', 1);
+             }
+          } else {
+            yardsGained = Math.floor(Math.random() * 10) + 4; description = `${qb.name} hits ${wr.name} on the slant vs Blitz.`;
+            this.recordStat(qb, 'passingComp', 1); this.recordStat(wr, 'receptions', 1);
+          }
         } else { 
           yardsGained = Math.floor(Math.random() * 10) + 5; description = `Easy completion to ${wr.name}.`;
           this.recordStat(qb, 'passingComp', 1); this.recordStat(wr, 'receptions', 1);
@@ -711,9 +822,15 @@ export class MatchEngine {
       case PLAY_TYPES.PASS_SCREEN:
          this.recordStat(qb, 'passingAtt', 1);
          if (defChoice === DEFENSE_TYPES.BLITZ) {
-            yardsGained = Math.floor(Math.random() * 15) + 5;
-            description = `Perfect screen to ${rb.name} against the blitz!`;
-            this.recordStat(qb, 'passingComp', 1); this.recordStat(rb, 'receptions', 1); // Screen often to RB
+            if (Math.random() < 0.12) {
+              yardsGained = -6;
+              description = `SACK! ${dl.name} gets to ${qb.name} before the screen can set up.`;
+              this.recordStat(dl, 'sacks', 1);
+            } else {
+              yardsGained = Math.floor(Math.random() * 15) + 5;
+              description = `Perfect screen to ${rb.name} against the blitz!`;
+              this.recordStat(qb, 'passingComp', 1); this.recordStat(rb, 'receptions', 1); // Screen often to RB
+            }
          } else if (defChoice === DEFENSE_TYPES.PASS_COVERAGE) {
             yardsGained = Math.floor(Math.random() * 3) - 2;
             description = `Screen sniffed out by ${tackler.name}.`;

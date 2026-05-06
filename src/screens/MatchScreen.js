@@ -3,6 +3,7 @@ import { StyleSheet, Text, View, SafeAreaView, TouchableOpacity, ScrollView, Ani
 import { MatchEngine, PLAY_TYPES, DEFENSE_TYPES } from '../engine/MatchEngine';
 import { TEAMS } from '../data/teams';
 import { league } from '../engine/LeagueEngine';
+import { StorageService } from '../services/StorageService';
 
 export default function MatchScreen({ route, navigation }) {
   const { homeId, awayId, isPlayoff, userTeamId, injuries } = route.params;
@@ -23,6 +24,7 @@ export default function MatchScreen({ route, navigation }) {
       league.getGamePlan(awayId),
       userTeamId
   ));
+  const resultSavedRef = useRef(false);
   const engine = engineRef.current; // Shorthand
 
   // We need React State to force re-renders when the engine state changes
@@ -121,8 +123,7 @@ export default function MatchScreen({ route, navigation }) {
       setPendingContext(null);
   };
 
-  const handleExitGame = () => {
-    // Navigate back to Season screen with result
+  const handleExitGame = async () => {
     const result = {
       homeScore: gameState.homeScore,
       awayScore: gameState.awayScore,
@@ -132,6 +133,12 @@ export default function MatchScreen({ route, navigation }) {
     
     // Get stats from engine
     const { stats, injuries: newInjuries } = engine.getMatchStats();
+
+    if (!resultSavedRef.current) {
+      league.applyGameResult(result, stats, newInjuries);
+      await StorageService.saveGame(league.getSaveData());
+      resultSavedRef.current = true;
+    }
     
     navigation.navigate('BoxScore', {
       userTeamId,

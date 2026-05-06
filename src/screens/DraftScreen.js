@@ -19,30 +19,57 @@ export default function DraftScreen({ route, navigation }) {
     const [needs, setNeeds] = useState([]);
 
     useEffect(() => {
-        if (!league.draftClass || league.draftClass.length === 0) {
-            league.startDraft();
-        }
-        updateDraftState();
-        setNeeds(league.getDraftNeeds(userTeamId));
-        const timer = setTimeout(() => processCpuPicks(), 1000);
+        let timer;
+        const initializeDraft = async () => {
+            const draftComplete = league.draftOrder && league.currentPickIndex >= league.draftOrder.length;
+            if (!draftComplete && (!league.draftClass || league.draftClass.length === 0 || !league.draftOrder)) {
+                league.startDraft();
+                await StorageService.saveGame(league.getSaveData());
+            }
+
+            updateDraftState();
+            setDraftLog(getCurrentDraftLog());
+            setNeeds(league.getDraftNeeds(userTeamId));
+            timer = setTimeout(() => processCpuPicks(), 1000);
+        };
+
+        initializeDraft();
         return () => clearTimeout(timer);
     }, []);
 
-    const updateDraftState = () => {
-        setProspects([...league.draftClass]);
+    const getCurrentDraftLog = () => {
+        return (league.draftHistory || [])
+            .filter(pick => pick.season === league.season)
+            .map(pick => ({
+                type: 'pick',
+                teamId: pick.teamId,
+                player: pick.player,
+            }));
     };
 
-    const processCpuPicks = () => {
+    const updateDraftState = () => {
+        setProspects([...(league.draftClass || [])]);
+        setDraftOver(Boolean(league.draftOrder && league.currentPickIndex >= league.draftOrder.length));
+        setIsUserTurn(Boolean(
+            league.draftOrder &&
+            league.currentPickIndex < league.draftOrder.length &&
+            league.draftOrder[league.currentPickIndex] === userTeamId
+        ));
+    };
+
+    const processCpuPicks = async () => {
+        if (!league.draftOrder || league.currentPickIndex >= league.draftOrder.length) {
+            updateDraftState();
+            return;
+        }
+
         const newPicks = league.resolveCpuPicks(userTeamId);
         if (newPicks.length > 0) {
              setDraftLog(prev => [...prev, ...newPicks]);
-             updateDraftState();
+             await StorageService.saveGame(league.getSaveData());
         }
-        if (league.currentPickIndex >= league.draftOrder.length) {
-            setDraftOver(true);
-        } else if (league.draftOrder[league.currentPickIndex] === userTeamId) {
-            setIsUserTurn(true);
-        }
+        updateDraftState();
+        setNeeds(league.getDraftNeeds(userTeamId));
     };
 
     const handleDraftPlayer = (player, index) => {
@@ -52,12 +79,13 @@ export default function DraftScreen({ route, navigation }) {
             `Draft ${player.position} ${player.name}?\n\nOVR: ${player.overall} | Potential: ${player.potential}\nStrength: ${player.strength}\nComp: ${player.comparison}`,
             [
                 { text: "Cancel", style: "cancel" },
-                { text: "Draft", onPress: () => {
+                { text: "Draft", onPress: async () => {
                     const picked = league.userSelectPlayer(userTeamId, index);
+                    if (!picked) return;
                     setDraftLog(prev => [...prev, { type: 'pick', teamId: userTeamId, player: picked }]);
-                    setIsUserTurn(false);
                     updateDraftState();
                     setNeeds(league.getDraftNeeds(userTeamId));
+                    await StorageService.saveGame(league.getSaveData());
                     setTimeout(() => processCpuPicks(), 1000);
                 }}
             ]

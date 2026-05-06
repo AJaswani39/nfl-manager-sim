@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, SafeAreaView, TouchableOpacity, ScrollView, FlatList } from 'react-native';
+import { StyleSheet, Text, View, SafeAreaView, TouchableOpacity, ScrollView, FlatList, Platform } from 'react-native';
 import { league } from '../engine/LeagueEngine';
 import { TEAMS } from '../data/teams';
 import { StorageService } from '../services/StorageService';
@@ -64,7 +64,7 @@ export default function SeasonScreen({ route, navigation }) {
 
   const nextMatch = getNextMatch();
 
-  const handleSimulateWeek = () => {
+  const handleSimulateWeek = async () => {
     // if (league.currentWeek > 17) return; // REMOVED LIMIT
     
     // Capture the result of the user's game before simulating
@@ -75,6 +75,7 @@ export default function SeasonScreen({ route, navigation }) {
     // Update state
     setCurrentWeek(league.currentWeek);
     setStandings(league.getStandingsSorted());
+    await StorageService.saveGame(league.getSaveData());
 
     // Show result
     if (match && match.result) {
@@ -99,7 +100,7 @@ export default function SeasonScreen({ route, navigation }) {
     setStandings(league.getStandingsSorted());
     
     // Auto-save
-    StorageService.saveGame(league.getSaveData());
+    await StorageService.saveGame(league.getSaveData());
     
     // Show result feedback
     if (match.result) {
@@ -146,6 +147,7 @@ export default function SeasonScreen({ route, navigation }) {
   
   const isSpoilerGame = userStats?.eliminated && oppStats && !oppStats.eliminated && league.phase === 'regular';
   const knockedOutOpponent = route.params?.knockedOutOpponent;
+  const playoffOdds = currentWeek >= 16 ? league.calculatePlayoffOdds() : {};
 
   return (
     <SafeAreaView style={styles.container}>
@@ -420,10 +422,11 @@ export default function SeasonScreen({ route, navigation }) {
 
             {/* Quick Sim (Only Regular Season) */}
             {league.phase === 'regular' && (!nextMatch || nextMatch.played) && (
-                <TouchableOpacity style={[styles.simButton, {marginTop:10, backgroundColor:'#777'}]} onPress={() => {
+                <TouchableOpacity style={[styles.simButton, {marginTop:10, backgroundColor:'#777'}]} onPress={async () => {
                     for(let i=0; i<4; i++) league.simulateWeek(league.currentWeek - 1);
                     setCurrentWeek(league.currentWeek);
                     setStandings(league.getStandingsSorted());
+                    await StorageService.saveGame(league.getSaveData());
                 }}>
                   <Text style={styles.simButtonText}>QUICK SIM (4w)</Text>
                 </TouchableOpacity>
@@ -433,7 +436,7 @@ export default function SeasonScreen({ route, navigation }) {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Season Over</Text>
             <TouchableOpacity style={styles.simButton} onPress={() => navigation.navigate('SeasonRecap', { userTeamId })}>
-                <Text style={styles.simBtnText}>VIEW SEASON RECAP →</Text>
+                <Text style={styles.simButtonText}>VIEW SEASON RECAP →</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -463,7 +466,7 @@ export default function SeasonScreen({ route, navigation }) {
           <View style={styles.section}>
              <Text style={styles.sectionTitle}>Playoff Hunt (Odds to Make)</Text>
              {league.getStandingsSorted().filter((_, i) => i < 16).map(team => {
-                const odds = league.calculatePlayoffOdds()[team.id] || 0;
+                const odds = playoffOdds[team.id] || 0;
                 return (
                   <View key={team.id} style={styles.standingRow}>
                     <Text style={styles.standingTeam}>{team.name}</Text>
@@ -574,10 +577,17 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderRadius: 12,
     padding: 16,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 5,
-    elevation: 2,
+    ...Platform.select({
+      web: {
+        boxShadow: '0 2px 5px rgba(0, 0, 0, 0.05)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOpacity: 0.05,
+        shadowRadius: 5,
+        elevation: 2,
+      },
+    }),
   },
   sectionTitle: {
     fontSize: 18,

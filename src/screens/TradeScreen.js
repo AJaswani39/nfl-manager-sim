@@ -127,7 +127,11 @@ export default function TradeScreen({ route }) {
       )}
 
       {/* Team Selector */}
-      <View style={[styles.teamSelector, !tradeWindowOpen && {opacity: 0.4}]} pointerEvents={tradeWindowOpen ? 'auto' : 'none'}>
+      <View style={[
+        styles.teamSelector,
+        !tradeWindowOpen && styles.disabledSection,
+        { pointerEvents: tradeWindowOpen ? 'auto' : 'none' },
+      ]}>
         <Text style={styles.sectionLabel}>Select Trade Partner:</Text>
         <FlatList
           horizontal
@@ -168,7 +172,11 @@ export default function TradeScreen({ route }) {
       </View>
 
       {/* Trade Evaluation */}
-      <View style={[styles.evaluationSection, !tradeWindowOpen && {opacity: 0.4}]} pointerEvents={tradeWindowOpen ? 'auto' : 'none'}>
+      <View style={[
+        styles.evaluationSection,
+        !tradeWindowOpen && styles.disabledSection,
+        { pointerEvents: tradeWindowOpen ? 'auto' : 'none' },
+      ]}>
         {tradeResult && (
           <View style={[styles.resultBox, tradeResult.willAccept ? styles.resultAccepted : styles.resultRejected]}>
             <Text style={styles.resultText}>{tradeResult.message}</Text>
@@ -216,6 +224,9 @@ const styles = StyleSheet.create({
     padding: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#222',
+  },
+  disabledSection: {
+    opacity: 0.4,
   },
   sectionLabel: {
     color: '#888',

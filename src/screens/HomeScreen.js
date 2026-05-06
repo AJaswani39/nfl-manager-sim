@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   StyleSheet, Text, View, FlatList, SafeAreaView,
-  TouchableOpacity, Alert, ActivityIndicator, ScrollView,
+  TouchableOpacity, Alert, ActivityIndicator, ScrollView, Platform,
 } from 'react-native';
 import { TEAMS } from '../data/teams';
 import { league } from '../engine/LeagueEngine';
@@ -77,9 +77,28 @@ export default function HomeScreen({ navigation }) {
     }
   };
 
+  const deleteSlot = async (slotId) => {
+    const result = await StorageService.deleteSlot(slotId);
+    if (result.success) {
+      if (league.slotId === slotId) {
+        league.resetGame();
+      }
+      refreshIndex();
+    } else {
+      Alert.alert('Error', 'Could not delete save slot.');
+    }
+  };
+
   const handleDeleteSlot = (slotId) => {
     const existing = slots[slotId];
     if (!existing) return;
+
+    if (Platform.OS === 'web' && typeof window !== 'undefined' && window.confirm) {
+      const confirmed = window.confirm(`Delete your ${existing.teamName} save? This cannot be undone.`);
+      if (confirmed) deleteSlot(slotId);
+      return;
+    }
+
     Alert.alert(
       'Delete Franchise?',
       `Delete your ${existing.teamName} save? This cannot be undone.`,
@@ -88,10 +107,7 @@ export default function HomeScreen({ navigation }) {
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: async () => {
-            await StorageService.deleteSlot(slotId);
-            refreshIndex();
-          },
+          onPress: () => deleteSlot(slotId),
         },
       ]
     );
@@ -292,11 +308,18 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderLeftWidth: 6,
     padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    ...Platform.select({
+      web: {
+        boxShadow: '0 2px 4px rgba(0, 0, 0, 0.10)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 3,
+      },
+    }),
   },
   slotCardHeader: {
     flexDirection: 'row',
@@ -409,11 +432,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    ...Platform.select({
+      web: {
+        boxShadow: '0 2px 4px rgba(0, 0, 0, 0.10)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 3,
+      },
+    }),
     borderLeftWidth: 6,
   },
   teamCardHeader: {

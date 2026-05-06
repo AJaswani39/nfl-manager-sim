@@ -5,7 +5,7 @@ import { TEAMS } from '../data/teams';
 import { league } from '../engine/LeagueEngine';
 
 export default function BoxScoreScreen({ route, navigation }) {
-  const { result, playerStats, userTeamId, injuries } = route.params;
+  const { result, playerStats, userTeamId } = route.params;
   
   const homeTeam = TEAMS.find(t => t.id === result.homeId);
   const awayTeam = TEAMS.find(t => t.id === result.awayId);
@@ -37,10 +37,7 @@ export default function BoxScoreScreen({ route, navigation }) {
 
   const handleContinue = () => {
     navigation.navigate('Season', {
-      userTeamId: userTeamId,
-      result: result,
-      playerStats: playerStats,
-      injuries: injuries
+      userTeamId: userTeamId
     });
   };
 
