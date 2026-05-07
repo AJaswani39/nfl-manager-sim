@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, SafeAreaView, FlatList, TouchableOpacity, Alert, ScrollView } from 'react-native';
+import { StyleSheet, Text, View, SafeAreaView, FlatList, TouchableOpacity, ScrollView } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { league } from '../engine/LeagueEngine';
 import { TEAMS } from '../data/teams';
@@ -7,12 +7,14 @@ import { StorageService } from '../services/StorageService';
 
 export default function FreeAgencyScreen({ route }) {
   const navigation = useNavigation();
-  const { userTeamId } = route.params;
+  const userTeamId = route.params?.userTeamId || league.userTeamId;
   const userTeam = TEAMS.find(t => t.id === userTeamId);
   
   const [freeAgents, setFreeAgents] = useState(league.getFreeAgents());
   const [positionFilter, setPositionFilter] = useState(null);
   const [roster, setRoster] = useState(league.rosters[userTeamId] || []);
+  const [selectedFreeAgentId, setSelectedFreeAgentId] = useState(null);
+  const [statusMessage, setStatusMessage] = useState('');
 
   const positions = ['ALL', 'QB', 'RB', 'WR', 'TE', 'OL', 'DL', 'LB', 'CB', 'S'];
 
@@ -20,60 +22,60 @@ export default function FreeAgencyScreen({ route }) {
     ? freeAgents.filter(p => p.position === positionFilter)
     : freeAgents;
 
-  const handleSignPlayer = (player) => {
-    Alert.alert(
-      'Sign Free Agent',
-      `Sign ${player.name} (${player.position}, ${player.overall} OVR)?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Sign',
-          onPress: async () => {
-            league.signFreeAgent(userTeamId, player.id);
-            setFreeAgents([...league.getFreeAgents()]);
-            setRoster([...(league.rosters[userTeamId] || [])]);
-            await StorageService.saveGame(league.getSaveData());
-          }
-        }
-      ]
-    );
+  const refreshFreeAgencyState = () => {
+    setFreeAgents([...league.getFreeAgents()]);
+    setRoster([...(league.rosters[userTeamId] || [])]);
   };
 
-  const handleCutPlayer = (player) => {
-    Alert.alert(
-      'Release Player',
-      `Release ${player.name} (${player.position}, ${player.overall} OVR)?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Release',
-          style: 'destructive',
-          onPress: async () => {
-            league.cutPlayer(userTeamId, player.id);
-            setFreeAgents([...league.getFreeAgents()]);
-            setRoster([...(league.rosters[userTeamId] || [])]);
-            await StorageService.saveGame(league.getSaveData());
-          }
-        }
-      ]
-    );
+  const handleSignPlayer = async (player) => {
+    if (!player) return;
+    const signed = league.signFreeAgent(userTeamId, player.id);
+    if (!signed) {
+      setStatusMessage('Could not sign player.');
+      return;
+    }
+    setSelectedFreeAgentId(null);
+    refreshFreeAgencyState();
+    setStatusMessage(`Signed ${signed.position} ${signed.name}.`);
+    await StorageService.saveGame(league.getSaveData());
   };
 
-  const renderFreeAgent = ({ item }) => (
-    <TouchableOpacity style={styles.playerRow} onPress={() => handleSignPlayer(item)}>
-      <View style={styles.positionBadge}>
-        <Text style={styles.positionText}>{item.position}</Text>
-      </View>
-      <View style={styles.playerInfo}>
-        <Text style={styles.playerName}>{item.name}</Text>
-        <Text style={styles.playerDetails}>Age: {item.age}</Text>
-      </View>
-      <View style={styles.ratingBadge}>
-        <Text style={styles.ratingText}>{item.overall}</Text>
-      </View>
-      <Text style={styles.signBtn}>+ SIGN</Text>
-    </TouchableOpacity>
-  );
+  const handleCutPlayer = async (player) => {
+    if (!player) return;
+    const cut = league.cutPlayer(userTeamId, player.id);
+    if (!cut) {
+      setStatusMessage('Could not release player.');
+      return;
+    }
+    refreshFreeAgencyState();
+    setStatusMessage(`Released ${cut.position} ${cut.name}.`);
+    await StorageService.saveGame(league.getSaveData());
+  };
+
+  const renderFreeAgent = ({ item }) => {
+    const isSelected = selectedFreeAgentId === item.id;
+    return (
+      <TouchableOpacity
+        style={[styles.playerRow, isSelected && styles.selectedPlayerRow]}
+        onPress={() => setSelectedFreeAgentId(item.id)}
+        activeOpacity={0.75}
+      >
+        <View style={styles.positionBadge}>
+          <Text style={styles.positionText}>{item.position}</Text>
+        </View>
+        <View style={styles.playerInfo}>
+          <Text style={styles.playerName}>{item.name}</Text>
+          <Text style={styles.playerDetails}>Age: {item.age}</Text>
+        </View>
+        <View style={styles.ratingBadge}>
+          <Text style={styles.ratingText}>{item.overall}</Text>
+        </View>
+        <TouchableOpacity style={styles.signButton} onPress={() => handleSignPlayer(item)}>
+          <Text style={styles.signBtn}>+ SIGN</Text>
+        </TouchableOpacity>
+      </TouchableOpacity>
+    );
+  };
 
   const renderRosterPlayer = ({ item }) => (
     <View style={styles.rosterRow}>
@@ -84,11 +86,13 @@ export default function FreeAgencyScreen({ route }) {
         <Text style={styles.rosterPlayerName}>{item.name}</Text>
       </View>
       <Text style={styles.rosterRating}>{item.overall}</Text>
-      <TouchableOpacity onPress={() => handleCutPlayer(item)}>
+      <TouchableOpacity style={styles.cutButton} onPress={() => handleCutPlayer(item)}>
         <Text style={styles.cutBtn}>CUT</Text>
       </TouchableOpacity>
     </View>
   );
+
+  const selectedFreeAgent = freeAgents.find(p => p.id === selectedFreeAgentId);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -132,6 +136,19 @@ export default function FreeAgencyScreen({ route }) {
         {/* Free Agents List */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Available Free Agents ({filteredAgents.length})</Text>
+          {statusMessage ? <Text style={styles.statusText}>{statusMessage}</Text> : null}
+          {selectedFreeAgent && (
+            <View style={styles.selectionCard}>
+              <Text style={styles.selectionLabel}>Selected Free Agent</Text>
+              <Text style={styles.selectionName}>{selectedFreeAgent.position} {selectedFreeAgent.name}</Text>
+              <Text style={styles.selectionMeta}>
+                {selectedFreeAgent.overall} OVR | Age {selectedFreeAgent.age}
+              </Text>
+              <TouchableOpacity style={styles.selectionSignBtn} onPress={() => handleSignPlayer(selectedFreeAgent)}>
+                <Text style={styles.selectionSignText}>SIGN PLAYER</Text>
+              </TouchableOpacity>
+            </View>
+          )}
           {filteredAgents.length > 0 ? (
             <FlatList
               data={filteredAgents}
@@ -255,6 +272,11 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#1a1a1a',
   },
+  selectedPlayerRow: {
+    backgroundColor: 'rgba(76, 195, 247, 0.14)',
+    borderWidth: 1,
+    borderColor: '#4fc3f7',
+  },
   positionBadge: {
     backgroundColor: '#1976d2',
     paddingHorizontal: 8,
@@ -296,6 +318,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: 'bold',
   },
+  signButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
   signBtn: {
     color: '#4caf50',
     fontSize: 12,
@@ -317,10 +343,58 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginRight: 8,
   },
+  cutButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
   cutBtn: {
     color: '#f44336',
     fontSize: 10,
     fontWeight: 'bold',
+  },
+  statusText: {
+    color: '#4fc3f7',
+    fontSize: 12,
+    fontWeight: '700',
+    paddingHorizontal: 12,
+    paddingTop: 8,
+  },
+  selectionCard: {
+    margin: 12,
+    padding: 12,
+    backgroundColor: '#111',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#4fc3f7',
+  },
+  selectionLabel: {
+    color: '#4fc3f7',
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 1,
+    marginBottom: 4,
+  },
+  selectionName: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  selectionMeta: {
+    color: '#aaa',
+    fontSize: 12,
+    marginTop: 4,
+    marginBottom: 10,
+  },
+  selectionSignBtn: {
+    backgroundColor: '#4caf50',
+    padding: 10,
+    borderRadius: 6,
+    alignItems: 'center',
+  },
+  selectionSignText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '900',
   },
   emptyState: {
     flex: 1,

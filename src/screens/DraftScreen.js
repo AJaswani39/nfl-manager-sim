@@ -10,13 +10,14 @@ const POTENTIAL_COLORS = {
 };
 
 export default function DraftScreen({ route, navigation }) {
-    const { userTeamId } = route.params;
+    const userTeamId = route.params?.userTeamId || league.userTeamId;
     const [prospects, setProspects] = useState([]);
     const [draftLog, setDraftLog] = useState([]);
     const [isUserTurn, setIsUserTurn] = useState(false);
     const [draftOver, setDraftOver] = useState(false);
     const [tab, setTab] = useState('prospects'); // 'prospects' | 'needs' | 'history'
     const [needs, setNeeds] = useState([]);
+    const [selectedProspectIndex, setSelectedProspectIndex] = useState(null);
 
     useEffect(() => {
         let timer;
@@ -48,12 +49,17 @@ export default function DraftScreen({ route, navigation }) {
     };
 
     const updateDraftState = () => {
-        setProspects([...(league.draftClass || [])]);
-        setDraftOver(Boolean(league.draftOrder && league.currentPickIndex >= league.draftOrder.length));
+        const nextProspects = [...(league.draftClass || [])];
+        const currentPickIndex = Number.isFinite(league.currentPickIndex) ? league.currentPickIndex : 0;
+        setProspects(nextProspects);
+        setDraftOver(Boolean(league.draftOrder && currentPickIndex >= league.draftOrder.length));
         setIsUserTurn(Boolean(
             league.draftOrder &&
-            league.currentPickIndex < league.draftOrder.length &&
-            league.draftOrder[league.currentPickIndex] === userTeamId
+            currentPickIndex < league.draftOrder.length &&
+            league.draftOrder[currentPickIndex] === userTeamId
+        ));
+        setSelectedProspectIndex(prev => (
+            prev != null && prev < nextProspects.length ? prev : null
         ));
     };
 
@@ -72,24 +78,24 @@ export default function DraftScreen({ route, navigation }) {
         setNeeds(league.getDraftNeeds(userTeamId));
     };
 
-    const handleDraftPlayer = (player, index) => {
-        if (!isUserTurn) return;
-        Alert.alert(
-            "Draft Player",
-            `Draft ${player.position} ${player.name}?\n\nOVR: ${player.overall} | Potential: ${player.potential}\nStrength: ${player.strength}\nComp: ${player.comparison}`,
-            [
-                { text: "Cancel", style: "cancel" },
-                { text: "Draft", onPress: async () => {
-                    const picked = league.userSelectPlayer(userTeamId, index);
-                    if (!picked) return;
-                    setDraftLog(prev => [...prev, { type: 'pick', teamId: userTeamId, player: picked }]);
-                    updateDraftState();
-                    setNeeds(league.getDraftNeeds(userTeamId));
-                    await StorageService.saveGame(league.getSaveData());
-                    setTimeout(() => processCpuPicks(), 1000);
-                }}
-            ]
-        );
+    const handleSelectProspect = (player, index) => {
+        if (!isUserTurn) {
+            Alert.alert("Draft Pick Pending", "CPU teams are still picking. Your pick will unlock when you are on the clock.");
+            return;
+        }
+        setSelectedProspectIndex(index);
+    };
+
+    const handleDraftPlayer = async (player, index) => {
+        if (!isUserTurn || !player) return;
+        const picked = league.userSelectPlayer(userTeamId, index);
+        if (!picked) return;
+        setDraftLog(prev => [...prev, { type: 'pick', teamId: userTeamId, player: picked }]);
+        setSelectedProspectIndex(null);
+        updateDraftState();
+        setNeeds(league.getDraftNeeds(userTeamId));
+        await StorageService.saveGame(league.getSaveData());
+        setTimeout(() => processCpuPicks(), 1000);
     };
 
     const handleFinishOffseason = async () => {
@@ -107,11 +113,17 @@ export default function DraftScreen({ route, navigation }) {
     const renderProspect = ({ item, index }) => {
         const potColor = POTENTIAL_COLORS[item.potential] || '#888';
         const fillsNeed = isNeedPosition(item.position);
+        const isSelected = selectedProspectIndex === index;
         return (
             <TouchableOpacity
-                style={[styles.prospectRow, isUserTurn && styles.activeRow, fillsNeed && styles.needHighlight]}
-                onPress={() => handleDraftPlayer(item, index)}
-                disabled={!isUserTurn}
+                style={[
+                    styles.prospectRow,
+                    isUserTurn && styles.activeRow,
+                    fillsNeed && styles.needHighlight,
+                    isSelected && styles.selectedProspectRow
+                ]}
+                onPress={() => handleSelectProspect(item, index)}
+                activeOpacity={0.75}
             >
                 <View style={styles.rankBox}><Text style={styles.rankText}>{index + 1}</Text></View>
                 <View style={{flex:1}}>
@@ -129,10 +141,13 @@ export default function DraftScreen({ route, navigation }) {
                     <View style={[styles.potBadge, {borderColor: potColor}]}>
                         <Text style={[styles.potText, {color: potColor}]}>{item.potential || '?'}</Text>
                     </View>
+                    {isSelected && <Text style={styles.selectedLabel}>SELECTED</Text>}
                 </View>
             </TouchableOpacity>
         );
     };
+
+    const selectedProspect = selectedProspectIndex != null ? prospects[selectedProspectIndex] : null;
 
     const renderNeedsTab = () => (
         <ScrollView contentContainerStyle={{padding: 10}}>
@@ -258,6 +273,24 @@ export default function DraftScreen({ route, navigation }) {
                     </View>
                     <View style={styles.rightPanel}>
                         <Text style={styles.sectionHeader}>Draft Board</Text>
+                        {isUserTurn && selectedProspect && (
+                            <View style={styles.selectionCard}>
+                                <Text style={styles.selectionLabel}>Selected Prospect</Text>
+                                <Text style={styles.selectionName}>{selectedProspect.position} {selectedProspect.name}</Text>
+                                <Text style={styles.selectionMeta}>
+                                    {selectedProspect.overall} OVR | Potential {selectedProspect.potential || '?'}
+                                </Text>
+                                <Text style={styles.selectionScout}>
+                                    {selectedProspect.strength || 'Athlete'} | Comp: {selectedProspect.comparison || '—'}
+                                </Text>
+                                <TouchableOpacity
+                                    style={styles.draftBtn}
+                                    onPress={() => handleDraftPlayer(selectedProspect, selectedProspectIndex)}
+                                >
+                                    <Text style={styles.draftBtnText}>DRAFT PLAYER</Text>
+                                </TouchableOpacity>
+                            </View>
+                        )}
                         <FlatList
                             data={draftLog}
                             keyExtractor={(item, i) => i.toString()}
@@ -317,6 +350,7 @@ const styles = StyleSheet.create({
 
     prospectRow: { flexDirection: 'row', alignItems: 'center', padding: 12, borderBottomWidth: 1, borderColor: '#333' },
     activeRow: { backgroundColor: 'rgba(16,172,132,0.3)' },
+    selectedProspectRow: { backgroundColor: 'rgba(254,202,87,0.22)', borderWidth: 1, borderColor: '#feca57' },
     needHighlight: { borderLeftWidth: 3, borderLeftColor: '#feca57' },
 
     rankBox: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#555', alignItems: 'center', justifyContent: 'center', marginRight: 10 },
@@ -327,7 +361,16 @@ const styles = StyleSheet.create({
     pRating: { color: '#feca57', fontSize: 18, fontWeight: 'bold' },
     potBadge: { borderWidth: 1, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1, marginTop: 3 },
     potText: { fontSize: 10, fontWeight: '800' },
+    selectedLabel: { color: '#feca57', fontSize: 9, fontWeight: '900', marginTop: 4 },
     needDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#feca57' },
+
+    selectionCard: { margin: 10, padding: 12, backgroundColor: '#1e272e', borderRadius: 8, borderWidth: 1, borderColor: '#feca57' },
+    selectionLabel: { color: '#feca57', fontSize: 11, fontWeight: '900', letterSpacing: 1, marginBottom: 4 },
+    selectionName: { color: '#fff', fontSize: 16, fontWeight: '900' },
+    selectionMeta: { color: '#feca57', fontSize: 12, fontWeight: '700', marginTop: 4 },
+    selectionScout: { color: '#aaa', fontSize: 11, marginTop: 4, marginBottom: 10 },
+    draftBtn: { backgroundColor: '#10ac84', padding: 10, borderRadius: 6, alignItems: 'center' },
+    draftBtnText: { color: '#fff', fontSize: 13, fontWeight: '900' },
 
     logItem: { padding: 8, borderBottomWidth: 1, borderColor: '#444' },
     logTeam: { color: '#feca57', fontWeight: 'bold', fontSize: 12 },

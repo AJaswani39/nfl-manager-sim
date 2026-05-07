@@ -830,7 +830,7 @@ export class LeagueEngine {
 
   calculateScore(offenseTeam, defenseTeam) {
     const base = Math.floor(this._random() * 20);
-    const matchUpDiff = (offenseTeam.ratings.offense - defenseTeam.ratings.defense) / 2;
+    const matchUpDiff = (offenseTeam.ratings.offense - defenseTeam.ratings.defense) / 3;
     const planMod = this.getGamePlanScoreModifier(offenseTeam.id, defenseTeam.id);
     const offCoachBonus = this.getCoachBonus(offenseTeam.id, 'offense');
     const defCoachBonus = this.getCoachBonus(defenseTeam.id, 'defense');
