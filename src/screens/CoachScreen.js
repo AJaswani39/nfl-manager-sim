@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, SafeAreaView, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { StyleSheet, Text, View, SafeAreaView, ScrollView, TouchableOpacity } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { league } from '../engine/LeagueEngine';
 import { TEAMS } from '../data/teams';
@@ -7,28 +7,18 @@ import { StorageService } from '../services/StorageService';
 
 export default function CoachScreen({ route }) {
   const navigation = useNavigation();
-  const { userTeamId } = route.params;
+  const userTeamId = route.params?.userTeamId || league.userTeamId;
   const userTeam = TEAMS.find(t => t.id === userTeamId);
   
   const [currentCoach, setCurrentCoach] = useState(league.getCoach(userTeamId));
+  const [statusMessage, setStatusMessage] = useState('');
   const coachTypes = league.getCoachTypes();
 
-  const handleSelectCoach = (coach) => {
-    Alert.alert(
-      'Change Coach',
-      `Hire a ${coach.name} coach?\n\n${coach.description}`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: `Hire ${coach.name}`,
-          onPress: async () => {
-            league.setCoach(userTeamId, coach.id);
-            setCurrentCoach(league.getCoach(userTeamId));
-            await StorageService.saveGame(league.getSaveData());
-          }
-        }
-      ]
-    );
+  const handleSelectCoach = async (coach) => {
+    league.setCoach(userTeamId, coach.id);
+    setCurrentCoach(league.getCoach(userTeamId));
+    setStatusMessage(`Hired ${coach.name}.`);
+    await StorageService.saveGame(league.getSaveData());
   };
 
   const renderBonusItem = (label, value) => {
@@ -100,6 +90,7 @@ export default function CoachScreen({ route }) {
         <Text style={styles.sectionSubtitle}>
           Coach bonuses affect your team's performance during games
         </Text>
+        {statusMessage ? <Text style={styles.statusText}>{statusMessage}</Text> : null}
 
         {coachTypes.map(coach => renderCoachCard(coach))}
 
@@ -179,6 +170,12 @@ const styles = StyleSheet.create({
     color: '#666',
     fontSize: 12,
     marginBottom: 16,
+  },
+  statusText: {
+    color: '#4fc3f7',
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 12,
   },
   coachCard: {
     flexDirection: 'row',

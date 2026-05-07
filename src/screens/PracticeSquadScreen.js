@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, SafeAreaView, FlatList, TouchableOpacity, Alert, ScrollView } from 'react-native';
+import { StyleSheet, Text, View, SafeAreaView, FlatList, TouchableOpacity, ScrollView } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { league } from '../engine/LeagueEngine';
 import { TEAMS } from '../data/teams';
@@ -9,13 +9,14 @@ const TABS = ['PRACTICE SQUAD', 'INJURED RESERVE', 'ACTIVE ROSTER'];
 
 export default function PracticeSquadScreen({ route }) {
   const navigation = useNavigation();
-  const { userTeamId } = route.params;
+  const userTeamId = route.params?.userTeamId || league.userTeamId;
   const userTeam = TEAMS.find(t => t.id === userTeamId);
 
   const [activeTab, setActiveTab] = useState(0);
   const [practiceSquad, setPracticeSquad] = useState(league.getPracticeSquad(userTeamId));
   const [irList, setIRList] = useState(league.getIRList(userTeamId));
   const [roster, setRoster] = useState(league.rosters[userTeamId] || []);
+  const [statusMessage, setStatusMessage] = useState('');
 
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
@@ -30,97 +31,57 @@ export default function PracticeSquadScreen({ route }) {
     setRoster([...(league.rosters[userTeamId] || [])]);
   };
 
-  const handlePromote = (player) => {
-    Alert.alert(
-      'Promote to Active Roster',
-      `Promote ${player.name} (${player.position}, ${player.overall} OVR) to the active roster?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Promote',
-          onPress: async () => {
-            const result = league.promoteFromPracticeSquad(userTeamId, player.id);
-            if (result) {
-              refreshData();
-              await StorageService.saveGame(league.getSaveData());
-            }
-          }
-        }
-      ]
-    );
+  const handlePromote = async (player) => {
+    const result = league.promoteFromPracticeSquad(userTeamId, player.id);
+    if (!result) {
+      setStatusMessage('Could not promote player.');
+      return;
+    }
+    refreshData();
+    setStatusMessage(`Promoted ${result.position} ${result.name}.`);
+    await StorageService.saveGame(league.getSaveData());
   };
 
-  const handleDemote = (player) => {
-    Alert.alert(
-      'Demote to Practice Squad',
-      `Demote ${player.name} (${player.position}, ${player.overall} OVR) to the practice squad?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Demote',
-          style: 'destructive',
-          onPress: async () => {
-            const result = league.demoteToPracticeSquad(userTeamId, player.id);
-            if (result) {
-              refreshData();
-              await StorageService.saveGame(league.getSaveData());
-            } else {
-              Alert.alert('Cannot Demote', 'Practice squad is full (max 16 players).');
-            }
-          }
-        }
-      ]
-    );
+  const handleDemote = async (player) => {
+    const result = league.demoteToPracticeSquad(userTeamId, player.id);
+    if (!result) {
+      setStatusMessage('Could not demote player. Practice squad may be full.');
+      return;
+    }
+    refreshData();
+    setStatusMessage(`Demoted ${result.position} ${result.name}.`);
+    await StorageService.saveGame(league.getSaveData());
   };
 
-  const handlePlaceOnIR = (player) => {
+  const handlePlaceOnIR = async (player) => {
     const state = league.playerState[player.id];
     if (!state || state.weeksOut <= 0) {
-      Alert.alert('Cannot Place on IR', 'Player must be injured to be placed on Injured Reserve.');
+      setStatusMessage('Player must be injured to be placed on IR.');
       return;
     }
-    Alert.alert(
-      'Place on Injured Reserve',
-      `Place ${player.name} (${player.position}) on IR? They will be out a minimum of 4 weeks and removed from the active roster.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Place on IR',
-          style: 'destructive',
-          onPress: async () => {
-            const result = league.placeOnIR(userTeamId, player.id);
-            if (result) {
-              refreshData();
-              await StorageService.saveGame(league.getSaveData());
-            }
-          }
-        }
-      ]
-    );
+    const result = league.placeOnIR(userTeamId, player.id);
+    if (!result) {
+      setStatusMessage('Could not place player on IR.');
+      return;
+    }
+    refreshData();
+    setStatusMessage(`Placed ${result.position} ${result.name} on IR.`);
+    await StorageService.saveGame(league.getSaveData());
   };
 
-  const handleActivateFromIR = (entry) => {
+  const handleActivateFromIR = async (entry) => {
     if (!entry.eligible) {
-      Alert.alert('Not Eligible', `${entry.player.name} cannot be activated yet. ${entry.weeksUntilEligible} week${entry.weeksUntilEligible !== 1 ? 's' : ''} remaining.`);
+      setStatusMessage(`${entry.player.name} cannot be activated yet. ${entry.weeksUntilEligible} week${entry.weeksUntilEligible !== 1 ? 's' : ''} remaining.`);
       return;
     }
-    Alert.alert(
-      'Activate from IR',
-      `Activate ${entry.player.name} (${entry.player.position}, ${entry.player.overall} OVR) back to the active roster?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Activate',
-          onPress: async () => {
-            const result = league.activateFromIR(userTeamId, entry.playerId);
-            if (result) {
-              refreshData();
-              await StorageService.saveGame(league.getSaveData());
-            }
-          }
-        }
-      ]
-    );
+    const result = league.activateFromIR(userTeamId, entry.playerId);
+    if (!result) {
+      setStatusMessage('Could not activate player from IR.');
+      return;
+    }
+    refreshData();
+    setStatusMessage(`Activated ${result.position} ${result.name}.`);
+    await StorageService.saveGame(league.getSaveData());
   };
 
   const getSeverityColor = (weeksOut) => {
@@ -273,6 +234,7 @@ export default function PracticeSquadScreen({ route }) {
 
       {/* Content */}
       <View style={styles.content}>
+        {statusMessage ? <Text style={styles.statusText}>{statusMessage}</Text> : null}
         {activeTab === 0 && (
           <>
             <Text style={styles.sectionTitle}>Practice Squad ({practiceSquad.length}/16)</Text>
@@ -396,6 +358,13 @@ const styles = StyleSheet.create({
     padding: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#222',
+  },
+  statusText: {
+    color: '#4fc3f7',
+    fontSize: 12,
+    fontWeight: '700',
+    paddingHorizontal: 12,
+    paddingTop: 10,
   },
   list: {
     flex: 1,

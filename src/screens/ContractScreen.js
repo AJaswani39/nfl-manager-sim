@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, SafeAreaView, FlatList, TouchableOpacity, Alert } from 'react-native';
+import { StyleSheet, Text, View, SafeAreaView, FlatList, TouchableOpacity } from 'react-native';
 import { league } from '../engine/LeagueEngine';
 import { TEAMS } from '../data/teams';
 import { StorageService } from '../services/StorageService';
 
 export default function ContractScreen({ route, navigation }) {
-  const { userTeamId } = route.params;
+  const userTeamId = route.params?.userTeamId || league.userTeamId;
   const userTeam = TEAMS.find(t => t.id === userTeamId);
   const [roster, setRoster] = useState([]);
   const [filter, setFilter] = useState('all'); // 'all' | 'expiring' | 'extended'
+  const [statusMessage, setStatusMessage] = useState('');
 
   useEffect(() => {
     loadRoster();
@@ -26,30 +27,19 @@ export default function ContractScreen({ route, navigation }) {
     setRoster(players);
   };
 
-  const handleExtend = (player) => {
+  const handleExtend = async (player) => {
     const cost = player.extensionCost;
     const capSpace = league.getCapSpace(userTeamId);
 
     if (cost > capSpace + player.contract.amount) {
-      Alert.alert('Not Enough Cap Space', `You need $${cost}M but only have $${capSpace}M in cap space.`);
+      setStatusMessage(`Not enough cap space. Need $${cost}M, available $${capSpace}M.`);
       return;
     }
 
-    Alert.alert(
-      'Extend Contract',
-      `Extend ${player.name} for 3 years at $${cost}M/year?\n\nCurrent: $${player.contract.amount}M (${player.contract.years}yr)\nNew: $${cost}M (3yr)`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Extend',
-          onPress: async () => {
-            league.extendContract(userTeamId, player.id, 3, cost);
-            await StorageService.saveGame(league.getSaveData());
-            loadRoster();
-          },
-        },
-      ]
-    );
+    league.extendContract(userTeamId, player.id, 3, cost);
+    setStatusMessage(`Extended ${player.name} for 3 years at $${cost}M/year.`);
+    await StorageService.saveGame(league.getSaveData());
+    loadRoster();
   };
 
   const getYearsColor = (years) => {
@@ -128,6 +118,7 @@ export default function ContractScreen({ route, navigation }) {
           <Text style={[styles.capValue, { color: '#3fb950' }]}>${capInfo.cap - capInfo.spent}M</Text>
         </View>
       </View>
+      {statusMessage ? <Text style={styles.statusText}>{statusMessage}</Text> : null}
 
       {/* Filter */}
       <View style={styles.filterRow}>
@@ -217,6 +208,13 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '900',
     marginTop: 4,
+  },
+  statusText: {
+    color: '#58a6ff',
+    fontSize: 12,
+    fontWeight: '700',
+    paddingHorizontal: 16,
+    marginBottom: 8,
   },
   filterRow: {
     flexDirection: 'row',

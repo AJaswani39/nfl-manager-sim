@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, FlatList, TouchableOpacity, Alert, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, FlatList, TouchableOpacity, ScrollView } from 'react-native';
 import { league } from '../engine/LeagueEngine';
 import { TEAMS } from '../data/teams';
 import { StorageService } from '../services/StorageService';
@@ -18,6 +18,7 @@ export default function DraftScreen({ route, navigation }) {
     const [tab, setTab] = useState('prospects'); // 'prospects' | 'needs' | 'history'
     const [needs, setNeeds] = useState([]);
     const [selectedProspectIndex, setSelectedProspectIndex] = useState(null);
+    const [statusMessage, setStatusMessage] = useState('');
 
     useEffect(() => {
         let timer;
@@ -80,9 +81,10 @@ export default function DraftScreen({ route, navigation }) {
 
     const handleSelectProspect = (player, index) => {
         if (!isUserTurn) {
-            Alert.alert("Draft Pick Pending", "CPU teams are still picking. Your pick will unlock when you are on the clock.");
+            setStatusMessage("CPU teams are still picking. Your pick will unlock when you are on the clock.");
             return;
         }
+        setStatusMessage('');
         setSelectedProspectIndex(index);
     };
 
@@ -92,6 +94,7 @@ export default function DraftScreen({ route, navigation }) {
         if (!picked) return;
         setDraftLog(prev => [...prev, { type: 'pick', teamId: userTeamId, player: picked }]);
         setSelectedProspectIndex(null);
+        setStatusMessage(`Drafted ${picked.position} ${picked.name}.`);
         updateDraftState();
         setNeeds(league.getDraftNeeds(userTeamId));
         await StorageService.saveGame(league.getSaveData());
@@ -264,6 +267,7 @@ export default function DraftScreen({ route, navigation }) {
             {tab === 'prospects' && (
                 <View style={{flex: 1, flexDirection:'row'}}>
                     <View style={styles.leftPanel}>
+                        {statusMessage ? <Text style={styles.statusText}>{statusMessage}</Text> : null}
                         <FlatList
                             data={prospects}
                             renderItem={renderProspect}
@@ -347,6 +351,13 @@ const styles = StyleSheet.create({
     rightPanel: { flex: 0.4, backgroundColor: '#2d3436' },
 
     sectionHeader: { padding: 10, backgroundColor: '#000', color: '#ccc', fontWeight: 'bold' },
+    statusText: {
+        color: '#58a6ff',
+        fontSize: 12,
+        fontWeight: '700',
+        paddingHorizontal: 12,
+        paddingTop: 8,
+    },
 
     prospectRow: { flexDirection: 'row', alignItems: 'center', padding: 12, borderBottomWidth: 1, borderColor: '#333' },
     activeRow: { backgroundColor: 'rgba(16,172,132,0.3)' },

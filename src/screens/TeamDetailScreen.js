@@ -1,13 +1,21 @@
 import React from 'react';
 import { StyleSheet, Text, View, FlatList, SafeAreaView, TouchableOpacity, Platform } from 'react-native';
 import { TEAMS } from '../data/teams';
-import { ROSTERS } from '../data/rosters';
 import { league } from '../engine/LeagueEngine';
+import { StorageService } from '../services/StorageService';
 
 export default function TeamDetailScreen({ route, navigation }) {
   const { teamId } = route.params;
   const team = TEAMS.find(t => t.id === teamId);
   const players = league.rosters[teamId] || [];
+
+  const handleStartSeason = async () => {
+    league.resetGame();
+    league.userTeamId = team.id;
+    league.generateSchedule();
+    await StorageService.saveGame(league.getSaveData());
+    navigation.navigate('Season', { teamId: team.id });
+  };
 
   const getPositionColor = (pos) => {
     if (['QB', 'RB', 'WR', 'TE'].includes(pos)) return '#e3f2fd'; // Offense Blue
@@ -69,7 +77,7 @@ export default function TeamDetailScreen({ route, navigation }) {
 
         <TouchableOpacity 
           style={styles.startSeasonButton}
-          onPress={() => navigation.navigate('Season', { userTeamId: team.id })}
+          onPress={handleStartSeason}
         >
           <Text style={styles.startSeasonText}>START 2026 SEASON</Text>
         </TouchableOpacity>

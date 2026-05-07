@@ -5,8 +5,8 @@ import { TEAMS } from '../data/teams';
 import { StorageService } from '../services/StorageService';
 
 export default function SeasonScreen({ route, navigation }) {
-  const { teamId } = route.params;
-  const userTeamId = teamId || league.userTeamId;
+  const { teamId, userTeamId: routeUserTeamId } = route.params || {};
+  const userTeamId = teamId || routeUserTeamId || league.userTeamId;
   const userTeam = TEAMS.find(t => t.id === userTeamId);
   const [currentWeek, setCurrentWeek] = useState(league.currentWeek);
   const [standings, setStandings] = useState(league.getStandingsSorted());

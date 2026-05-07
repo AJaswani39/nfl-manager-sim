@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   StyleSheet, Text, View, FlatList, SafeAreaView,
-  TouchableOpacity, Alert, ActivityIndicator, ScrollView, Platform,
+  TouchableOpacity, ActivityIndicator, ScrollView, Platform,
 } from 'react-native';
 import { TEAMS } from '../data/teams';
 import { league } from '../engine/LeagueEngine';
@@ -31,6 +31,8 @@ export default function HomeScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [phase, setPhase] = useState('slot_select'); // 'slot_select' | 'team_select'
   const [targetSlot, setTargetSlot] = useState(null);
+  const [confirmAction, setConfirmAction] = useState(null);
+  const [statusMessage, setStatusMessage] = useState('');
 
   const refreshIndex = useCallback(async () => {
     setLoading(true);
@@ -52,25 +54,23 @@ export default function HomeScreen({ navigation }) {
       league.slotId = slotId;
       navigation.navigate('Season', { teamId: result.data.userTeamId });
     } else {
-      Alert.alert('Error', 'Could not load save file.');
+      setStatusMessage('Could not load save file.');
     }
   };
 
   const handleStartNew = (slotId) => {
     const existing = slots[slotId];
     if (existing) {
-      Alert.alert(
-        'Overwrite Save?',
-        `This will erase your ${existing.teamName} franchise. Continue?`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Overwrite',
-            style: 'destructive',
-            onPress: () => { setTargetSlot(slotId); setPhase('team_select'); },
-          },
-        ]
-      );
+      const key = `overwrite-${slotId}`;
+      if (confirmAction !== key) {
+        setConfirmAction(key);
+        setStatusMessage(`Tap New Franchise again to overwrite ${existing.teamName}.`);
+        return;
+      }
+      setConfirmAction(null);
+      setStatusMessage('');
+      setTargetSlot(slotId);
+      setPhase('team_select');
     } else {
       setTargetSlot(slotId);
       setPhase('team_select');
@@ -85,32 +85,22 @@ export default function HomeScreen({ navigation }) {
       }
       refreshIndex();
     } else {
-      Alert.alert('Error', 'Could not delete save slot.');
+      setStatusMessage('Could not delete save slot.');
     }
   };
 
   const handleDeleteSlot = (slotId) => {
     const existing = slots[slotId];
     if (!existing) return;
-
-    if (Platform.OS === 'web' && typeof window !== 'undefined' && window.confirm) {
-      const confirmed = window.confirm(`Delete your ${existing.teamName} save? This cannot be undone.`);
-      if (confirmed) deleteSlot(slotId);
+    const key = `delete-${slotId}`;
+    if (confirmAction !== key) {
+      setConfirmAction(key);
+      setStatusMessage(`Tap delete again to remove ${existing.teamName}.`);
       return;
     }
-
-    Alert.alert(
-      'Delete Franchise?',
-      `Delete your ${existing.teamName} save? This cannot be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => deleteSlot(slotId),
-        },
-      ]
-    );
+    setConfirmAction(null);
+    setStatusMessage('');
+    deleteSlot(slotId);
   };
 
   // --- Team select actions ---
@@ -149,10 +139,10 @@ export default function HomeScreen({ navigation }) {
               <Text style={styles.slotSaved}>Saved {formatLastSaved(data.lastSaved)}</Text>
             </View>
             <TouchableOpacity
-              style={styles.deleteBtn}
+              style={[styles.deleteBtn, confirmAction === `delete-${slotId}` && styles.deleteBtnConfirm]}
               onPress={() => handleDeleteSlot(slotId)}
             >
-              <Text style={styles.deleteBtnText}>✕</Text>
+              <Text style={styles.deleteBtnText}>{confirmAction === `delete-${slotId}` ? 'DELETE' : '✕'}</Text>
             </TouchableOpacity>
           </View>
           <View style={styles.slotCardActions}>
@@ -163,10 +153,15 @@ export default function HomeScreen({ navigation }) {
               <Text style={styles.continueBtnText}>▶ CONTINUE</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={styles.newFranchiseSmallBtn}
+              style={[
+                styles.newFranchiseSmallBtn,
+                confirmAction === `overwrite-${slotId}` && styles.overwriteConfirmBtn
+              ]}
               onPress={() => handleStartNew(slotId)}
             >
-              <Text style={styles.newFranchiseSmallText}>New Franchise</Text>
+              <Text style={styles.newFranchiseSmallText}>
+                {confirmAction === `overwrite-${slotId}` ? 'Confirm Overwrite' : 'New Franchise'}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -252,6 +247,7 @@ export default function HomeScreen({ navigation }) {
         <Text style={styles.title}>NFL Manager 2026</Text>
         <Text style={styles.subtitle}>Select a save slot</Text>
       </View>
+      {statusMessage ? <Text style={styles.statusText}>{statusMessage}</Text> : null}
       <ScrollView contentContainerStyle={styles.slotsContainer}>
         {[1, 2, 3].map(renderSlotCard)}
       </ScrollView>
@@ -357,6 +353,10 @@ const styles = StyleSheet.create({
     padding: 6,
     marginLeft: 8,
   },
+  deleteBtnConfirm: {
+    backgroundColor: '#ffebee',
+    borderRadius: 6,
+  },
   deleteBtnText: {
     fontSize: 16,
     color: '#e53935',
@@ -385,6 +385,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#ccc',
     alignItems: 'center',
+  },
+  overwriteConfirmBtn: {
+    borderColor: '#e53935',
+    backgroundColor: '#ffebee',
+  },
+  statusText: {
+    color: '#e53935',
+    fontSize: 13,
+    fontWeight: '700',
+    paddingHorizontal: 20,
+    paddingTop: 10,
   },
   newFranchiseSmallText: {
     fontSize: 13,

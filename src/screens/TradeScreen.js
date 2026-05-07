@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, SafeAreaView, FlatList, TouchableOpacity, Alert, ScrollView } from 'react-native';
+import { StyleSheet, Text, View, SafeAreaView, FlatList, TouchableOpacity, ScrollView } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { league } from '../engine/LeagueEngine';
 import { TEAMS } from '../data/teams';
@@ -7,13 +7,14 @@ import { StorageService } from '../services/StorageService';
 
 export default function TradeScreen({ route }) {
   const navigation = useNavigation();
-  const { userTeamId } = route.params;
+  const userTeamId = route.params?.userTeamId || league.userTeamId;
   const userTeam = TEAMS.find(t => t.id === userTeamId);
   
   const [selectedPartner, setSelectedPartner] = useState(null);
   const [offeredPlayers, setOfferedPlayers] = useState([]);
   const [requestedPlayers, setRequestedPlayers] = useState([]);
   const [tradeResult, setTradeResult] = useState(null);
+  const [statusMessage, setStatusMessage] = useState('');
 
   const tradeWindowOpen = league.isTradeWindowOpen();
   const deadlineInfo = league.getTradeDeadlineInfo();
@@ -42,11 +43,12 @@ export default function TradeScreen({ route }) {
 
   const handleEvaluateTrade = () => {
     if (!selectedPartner || offeredPlayers.length === 0 || requestedPlayers.length === 0) {
-      Alert.alert('Invalid Trade', 'Select a trade partner and at least one player from each side.');
+      setStatusMessage('Select a trade partner and at least one player from each side.');
       return;
     }
 
     const result = league.evaluateTrade(userTeamId, selectedPartner, offeredPlayers, requestedPlayers);
+    setStatusMessage('');
     setTradeResult(result);
   };
 
@@ -55,15 +57,11 @@ export default function TradeScreen({ route }) {
 
     league.executeTrade(userTeamId, selectedPartner, offeredPlayers, requestedPlayers);
     await StorageService.saveGame(league.getSaveData());
-    
-    Alert.alert('Trade Complete!', 'The trade has been executed.', [
-      { text: 'OK', onPress: () => {
-        setOfferedPlayers([]);
-        setRequestedPlayers([]);
-        setTradeResult(null);
-        setSelectedPartner(null);
-      }}
-    ]);
+    setOfferedPlayers([]);
+    setRequestedPlayers([]);
+    setTradeResult(null);
+    setSelectedPartner(null);
+    setStatusMessage('Trade complete.');
   };
 
   const renderPlayerRow = (player, isSelected, onToggle) => (
@@ -185,6 +183,7 @@ export default function TradeScreen({ route }) {
             </Text>
           </View>
         )}
+        {statusMessage ? <Text style={styles.statusText}>{statusMessage}</Text> : null}
 
         <View style={styles.buttonRow}>
           <TouchableOpacity style={styles.evaluateBtn} onPress={handleEvaluateTrade}>
@@ -362,6 +361,13 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.7)',
     fontSize: 12,
     marginTop: 4,
+  },
+  statusText: {
+    color: '#4fc3f7',
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 10,
   },
   buttonRow: {
     flexDirection: 'row',

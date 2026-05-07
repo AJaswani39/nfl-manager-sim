@@ -1,54 +1,37 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, SafeAreaView, ScrollView, TouchableOpacity, Switch, Alert } from 'react-native';
+import { StyleSheet, Text, View, SafeAreaView, ScrollView, TouchableOpacity, Switch } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { StorageService } from '../services/StorageService';
 import { league } from '../engine/LeagueEngine';
 
 export default function SettingsScreen({ route }) {
   const navigation = useNavigation();
-  const { userTeamId } = route.params;
+  const userTeamId = route.params?.userTeamId || league.userTeamId;
   
   const [autoSave, setAutoSave] = useState(true);
   const [showInjuries, setShowInjuries] = useState(true);
   const [simSpeed, setSimSpeed] = useState('normal');
+  const [confirmAction, setConfirmAction] = useState(null);
 
-  const handleDeleteSave = () => {
-    Alert.alert(
-      'Delete Franchise?',
-      'This will delete your current franchise save and cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            await StorageService.deleteSave();
-            navigation.reset({ index: 0, routes: [{ name: 'Home' }] });
-          }
-        }
-      ]
-    );
+  const handleDeleteSave = async () => {
+    if (confirmAction !== 'delete') {
+      setConfirmAction('delete');
+      return;
+    }
+    await StorageService.deleteSave();
+    navigation.reset({ index: 0, routes: [{ name: 'Home' }] });
   };
 
   const handleResetGame = () => {
-    Alert.alert(
-      'Reset Game',
-      'This will reset the entire game to Week 1. Your current progress will be lost.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Reset',
-          style: 'destructive',
-          onPress: () => {
-            league.resetGame();
-            navigation.reset({
-              index: 0,
-              routes: [{ name: 'Home' }],
-            });
-          }
-        }
-      ]
-    );
+    if (confirmAction !== 'reset') {
+      setConfirmAction('reset');
+      return;
+    }
+    league.resetGame();
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'Home' }],
+    });
   };
 
   const renderToggle = (label, description, value, onToggle) => (
@@ -140,13 +123,22 @@ export default function SettingsScreen({ route }) {
 
         {/* Danger Zone */}
         <Text style={styles.sectionTitle}>⚠️ Danger Zone</Text>
+        {confirmAction ? (
+          <Text style={styles.confirmText}>
+            Tap {confirmAction === 'delete' ? 'Delete Save Data' : 'Reset Entire Game'} again to confirm.
+          </Text>
+        ) : null}
         
         <TouchableOpacity style={styles.dangerBtn} onPress={handleDeleteSave}>
-          <Text style={styles.dangerBtnText}>🗑️ Delete Save Data</Text>
+          <Text style={styles.dangerBtnText}>
+            {confirmAction === 'delete' ? 'CONFIRM DELETE SAVE DATA' : '🗑️ Delete Save Data'}
+          </Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={[styles.dangerBtn, styles.dangerResetBtn]} onPress={handleResetGame}>
-          <Text style={styles.dangerBtnText}>🔄 Reset Entire Game</Text>
+          <Text style={styles.dangerBtnText}>
+            {confirmAction === 'reset' ? 'CONFIRM RESET GAME' : '🔄 Reset Entire Game'}
+          </Text>
         </TouchableOpacity>
 
         {/* Credits */}
@@ -260,6 +252,12 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     borderWidth: 1,
     borderColor: '#f44336',
+  },
+  confirmText: {
+    color: '#ff9800',
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 10,
   },
   dangerResetBtn: {
     borderColor: '#ff9800',
