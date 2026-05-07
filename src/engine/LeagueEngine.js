@@ -45,6 +45,7 @@ export class LeagueEngine {
     this.playerIndex = {}; // { playerId: { ...player, teamId } } — O(1) lookup
     this._standingsDirty = true; // dirty-flag for cached standings
     this._cachedStandings = null;
+    this.playoffOddsCache = null;
     this.initializeStandings();
     this.initializePlayerStats();
     this.initializeCoaches();
@@ -494,6 +495,7 @@ export class LeagueEngine {
   }
 
   generateSchedule() {
+    this.invalidatePlayoffCache();
     // 1. PRESEASON (3 Weeks)
     // Random matchups, don't care about constraints much
     for (let w = 1; w <= 3; w++) {
@@ -654,6 +656,7 @@ export class LeagueEngine {
 
       match.result = result;
       match.played = true;
+      this.invalidatePlayoffCache();
 
       // Update Standings (if regular & not preseason)
       if (this.phase === 'regular' && !match.isPreseason) {
@@ -724,10 +727,15 @@ export class LeagueEngine {
     weekMatches.forEach(match => {
       if (match.played) return;
       
-      const homeScore = this.calculateScore(match.home, match.away);
-      const awayScore = this.calculateScore(match.away, match.home);
+      let homeScore = this.calculateScore(match.home, match.away);
+      let awayScore = this.calculateScore(match.away, match.home);
+      if (!match.isPreseason && homeScore === awayScore) {
+        if ((match.home.ratings.overall || 0) >= (match.away.ratings.overall || 0)) homeScore += 3;
+        else awayScore += 3;
+      }
       match.result = { homeScore, awayScore };
       match.played = true;
+      this.invalidatePlayoffCache();
       this.generateGameNews(match);
 
       // STARTING PRESEASON LOGIC
@@ -797,32 +805,19 @@ export class LeagueEngine {
   }
 
   checkElimination() {
-      // MVP logic: If MaxPossibleWins < Seed 7 Wins, Eliminated.
-      const picture = this.getPlayoffPicture();
+      const race = this.getPlayoffRace({ includeOdds: false });
       ['AFC', 'NFC'].forEach(conf => {
-          const seeds = picture[conf]; // Top 7 are seeds. Rest are 'In the Hunt' or 'Eliminated'
-          if (seeds.length < 7) return;
-          
-          const seed7 = seeds[6]; // The cutoff
-          const thresholdWins = seed7.w;
-          
-          // Check all teams in this conference
-          const confTeams = this.getStandingsSorted().filter(t => t.conference === conf);
-          
-          confTeams.forEach(team => {
-             const gamesPlayed = team.w + team.l; // + ties? MVP no ties.
-             const gamesRemaining = 17 - gamesPlayed;
-             const maxWins = team.w + gamesRemaining;
-             
-             if (maxWins < thresholdWins) {
-                 this.standings[team.id].eliminated = true;
-             } else {
-                 this.standings[team.id].eliminated = false;
-             }
-             
-             // Check Clinched (If MinWins > Seed 8 MaxWins)
-             // ... Logic for another day
-          });
+        const teams = [
+          ...(race[conf]?.divisionLeaders || []),
+          ...(race[conf]?.wildCards || []),
+          ...(race[conf]?.inTheHunt || []),
+          ...(race[conf]?.eliminated || []),
+        ];
+        teams.forEach(team => {
+          if (!this.standings[team.id]) return;
+          this.standings[team.id].eliminated = team.status === 'e';
+          this.standings[team.id].playoffStatus = team.status || '';
+        });
       });
   }
 
@@ -936,6 +931,7 @@ export class LeagueEngine {
     if (pointsFor > pointsAgainst) entry.w++;
     else if (pointsFor < pointsAgainst) entry.l++;
     this._standingsDirty = true;
+    this.invalidatePlayoffCache();
   }
 
   getStandingsSorted() {
@@ -1101,150 +1097,466 @@ export class LeagueEngine {
   }
   
   // PLAYOFF LOGIC
-  
-  getPlayoffPicture() {
-    // 1. Separate into Conferences
-    const afc = [];
-    const nfc = [];
-    
-    // Sort all teams by record first
-    const allTeams = this.getStandingsSorted();
-    
-    allTeams.forEach(t => {
-      if (t.conference === 'AFC') afc.push(t);
-      else nfc.push(t);
-    });
 
-    // 2. Determine Division Winners (Top record in each Div)
-    const getSeeds = (confTeams) => {
-      const divisions = { East: [], North: [], South: [], West: [] };
-      confTeams.forEach(t => divisions[t.division].push(t));
-      
-      const winners = [];
-      const wildCards = [];
+  invalidatePlayoffCache() {
+    this.playoffOddsCache = null;
+  }
 
-      Object.values(divisions).forEach(div => {
-         // Div is already sorted by Wins because confTeams was sorted
-         winners.push(div[0]); 
-         for(let i=1; i<div.length; i++) wildCards.push(div[i]);
-      });
-
-      // Sort winners by record (Seeds 1-4)
-      winners.sort((a, b) => b.w - a.w || (b.pf - b.pa) - (a.pf - a.pa));
-      
-      // Sort wildcards by record (Seeds 5-7)
-      wildCards.sort((a, b) => b.w - a.w || (b.pf - b.pa) - (a.pf - a.pa));
-
-      return [...winners, wildCards[0], wildCards[1], wildCards[2]]; // Top 4 winners + top 3 WC
-    };
-
-    return {
-      AFC: getSeeds(afc),
-      NFC: getSeeds(nfc)
+  _createRng(seed) {
+    let state = (Number(seed) >>> 0) || 1;
+    return () => {
+      state = (1664525 * state + 1013904223) >>> 0;
+      return state / 4294967296;
     };
   }
 
-  // Calculate Probability (Monte Carlo Lite)
-  // We run 50 simulations of the remaining season
-  calculatePlayoffOdds() {
-    const SIMULATIONS = 50;
-    const teamPlayoffCounts = {};
-    TEAMS.forEach(t => teamPlayoffCounts[t.id] = 0);
-    const totalRegularWeeks = 3 + 17;
-
-    if (this.phase === 'playoffs' || this.phase === 'offseason' || this.currentWeek > totalRegularWeeks) {
-      const picture = this.getPlayoffPicture();
-      [...picture.AFC, ...picture.NFC].forEach(team => {
-        if (team) teamPlayoffCounts[team.id] = SIMULATIONS;
-      });
-
-      const lockedOdds = {};
-      Object.keys(teamPlayoffCounts).forEach(id => {
-        lockedOdds[id] = Math.round((teamPlayoffCounts[id] / SIMULATIONS) * 100);
-      });
-      return lockedOdds;
+  _hashString(value) {
+    let hash = 2166136261;
+    for (let i = 0; i < value.length; i++) {
+      hash ^= value.charCodeAt(i);
+      hash = Math.imul(hash, 16777619);
     }
+    return hash >>> 0;
+  }
 
-    if (this.phase !== 'regular') return {};
-
-    // Snapshot only the fields the simulation actually uses (w, l)
-    // Avoids 50x JSON.parse(JSON.stringify()) of the full standings with match arrays
-    const baseRecords = {};
-    for (const teamId of Object.keys(this.standings)) {
-      baseRecords[teamId] = {
-        w: this.standings[teamId].w,
-        l: this.standings[teamId].l,
-        pf: this.standings[teamId].pf,
-        pa: this.standings[teamId].pa,
+  _blankPlayoffRecords() {
+    const records = {};
+    TEAMS.forEach(team => {
+      records[team.id] = {
+        w: 0,
+        l: 0,
+        pf: 0,
+        pa: 0,
+        confW: 0,
+        confL: 0,
+        divW: 0,
+        divL: 0,
+        h2h: {},
       };
+    });
+    return records;
+  }
+
+  _recordPlayoffGame(records, homeTeam, awayTeam, homeScore, awayScore) {
+    if (!records[homeTeam.id] || !records[awayTeam.id]) return;
+    const home = records[homeTeam.id];
+    const away = records[awayTeam.id];
+    const homeWon = homeScore > awayScore;
+    home.pf += homeScore;
+    home.pa += awayScore;
+    away.pf += awayScore;
+    away.pa += homeScore;
+    if (homeWon) {
+      home.w++;
+      away.l++;
+    } else {
+      away.w++;
+      home.l++;
     }
 
-    // Pre-collect remaining matches once instead of re-reading this.weeks per sim
-    const startWeek = this.currentWeek;
-    const remainingMatches = [];
-    for (let w = startWeek; w <= totalRegularWeeks; w++) {
-      const weekMatches = this.weeks[w - 1];
-      if (!weekMatches) continue;
-      for (const match of weekMatches) {
-        if (match.played || match.isPreseason) continue;
-        remainingMatches.push({
-          homeId: match.home.id,
-          awayId: match.away.id,
-          homeAdv: match.home.ratings.overall > match.away.ratings.overall ? 0.6 : 0.4,
-        });
+    if (homeTeam.conference === awayTeam.conference) {
+      if (homeWon) {
+        home.confW++;
+        away.confL++;
+      } else {
+        away.confW++;
+        home.confL++;
       }
     }
 
-    // Pre-split TEAMS by conference once
-    const afcTeams = TEAMS.filter(t => t.conference === 'AFC');
-    const nfcTeams = TEAMS.filter(t => t.conference === 'NFC');
-    const getSeeds = (teams, records) => {
-      const divisions = { East: [], North: [], South: [], West: [] };
-      teams.forEach(team => {
-        const record = records[team.id] || { w: 0, l: 0, pf: 0, pa: 0 };
-        divisions[team.division].push({ ...team, ...record });
-      });
-
-      const sortTeams = (a, b) => b.w - a.w || (b.pf - b.pa) - (a.pf - a.pa);
-      const winners = [];
-      const wildCards = [];
-      Object.values(divisions).forEach(div => {
-        div.sort(sortTeams);
-        if (div[0]) winners.push(div[0]);
-        for (let i = 1; i < div.length; i++) wildCards.push(div[i]);
-      });
-
-      winners.sort(sortTeams);
-      wildCards.sort(sortTeams);
-      return [...winners, ...wildCards].slice(0, 7);
-    };
-
-    for (let sim = 0; sim < SIMULATIONS; sim++) {
-      const simRecords = {};
-      Object.keys(baseRecords).forEach(teamId => {
-        simRecords[teamId] = { ...baseRecords[teamId] };
-      });
-
-      // Simulate remaining games
-      for (const m of remainingMatches) {
-        const homeWon = Math.random() < m.homeAdv;
-        const winnerId = homeWon ? m.homeId : m.awayId;
-        const loserId = homeWon ? m.awayId : m.homeId;
-        simRecords[winnerId].w++;
-        simRecords[loserId].l++;
+    if (homeTeam.conference === awayTeam.conference && homeTeam.division === awayTeam.division) {
+      if (homeWon) {
+        home.divW++;
+        away.divL++;
+      } else {
+        away.divW++;
+        home.divL++;
       }
-
-      getSeeds(afcTeams, simRecords).forEach(team => teamPlayoffCounts[team.id]++);
-      getSeeds(nfcTeams, simRecords).forEach(team => teamPlayoffCounts[team.id]++);
     }
 
-    // Convert to Percentages
-    const odds = {};
-    Object.keys(teamPlayoffCounts).forEach(id => {
-      odds[id] = Math.round((teamPlayoffCounts[id] / SIMULATIONS) * 100);
+    if (!home.h2h[awayTeam.id]) home.h2h[awayTeam.id] = { w: 0, l: 0 };
+    if (!away.h2h[homeTeam.id]) away.h2h[homeTeam.id] = { w: 0, l: 0 };
+    if (homeWon) {
+      home.h2h[awayTeam.id].w++;
+      away.h2h[homeTeam.id].l++;
+    } else {
+      away.h2h[homeTeam.id].w++;
+      home.h2h[awayTeam.id].l++;
+    }
+  }
+
+  _getPlayedRegularRecords() {
+    const records = this._blankPlayoffRecords();
+    for (let i = 3; i < Math.min(this.weeks.length, 20); i++) {
+      const weekMatches = this.weeks[i] || [];
+      weekMatches.forEach(match => {
+        if (!match || match.isPreseason || !match.played || !match.result) return;
+        this._recordPlayoffGame(records, match.home, match.away, match.result.homeScore, match.result.awayScore);
+      });
+    }
+
+    // Saves from older versions may have standings without complete match results.
+    TEAMS.forEach(team => {
+      const standing = this.standings[team.id];
+      if (!standing) return;
+      if (records[team.id].w + records[team.id].l < standing.w + standing.l) {
+        records[team.id].w = standing.w;
+        records[team.id].l = standing.l;
+        records[team.id].pf = standing.pf;
+        records[team.id].pa = standing.pa;
+      }
     });
 
+    return records;
+  }
+
+  _clonePlayoffRecords(records) {
+    const clone = {};
+    Object.keys(records).forEach(teamId => {
+      clone[teamId] = {
+        ...records[teamId],
+        h2h: Object.keys(records[teamId].h2h || {}).reduce((acc, oppId) => {
+          acc[oppId] = { ...records[teamId].h2h[oppId] };
+          return acc;
+        }, {}),
+      };
+    });
+    return clone;
+  }
+
+  _teamWithRecord(team, records) {
+    const record = records[team.id] || { w: 0, l: 0, pf: 0, pa: 0, confW: 0, confL: 0, divW: 0, divL: 0, h2h: {} };
+    return {
+      ...team,
+      ...record,
+      pointDiff: record.pf - record.pa,
+      confPct: (record.confW + record.confL) > 0 ? record.confW / (record.confW + record.confL) : 0,
+      divPct: (record.divW + record.divL) > 0 ? record.divW / (record.divW + record.divL) : 0,
+    };
+  }
+
+  _comparePlayoffTeams(a, b, records, scope = 'conference') {
+    const aRecord = records[a.id] || a;
+    const bRecord = records[b.id] || b;
+    const winDiff = (bRecord.w || 0) - (aRecord.w || 0);
+    if (winDiff !== 0) return winDiff;
+
+    const aH2h = aRecord.h2h?.[b.id] || { w: 0, l: 0 };
+    const bH2h = bRecord.h2h?.[a.id] || { w: 0, l: 0 };
+    const aH2hGames = aH2h.w + aH2h.l;
+    const bH2hGames = bH2h.w + bH2h.l;
+    if (aH2hGames > 0 && bH2hGames > 0 && aH2h.w !== bH2h.w) return bH2h.w - aH2h.w;
+
+    if (scope === 'division' || a.division === b.division) {
+      const divPctDiff = this._pct(bRecord.divW, bRecord.divL) - this._pct(aRecord.divW, aRecord.divL);
+      if (divPctDiff !== 0) return divPctDiff > 0 ? 1 : -1;
+    }
+
+    if (a.conference === b.conference) {
+      const confPctDiff = this._pct(bRecord.confW, bRecord.confL) - this._pct(aRecord.confW, aRecord.confL);
+      if (confPctDiff !== 0) return confPctDiff > 0 ? 1 : -1;
+    }
+
+    const diffMargin = ((bRecord.pf || 0) - (bRecord.pa || 0)) - ((aRecord.pf || 0) - (aRecord.pa || 0));
+    if (diffMargin !== 0) return diffMargin;
+    const pointsForDiff = (bRecord.pf || 0) - (aRecord.pf || 0);
+    if (pointsForDiff !== 0) return pointsForDiff;
+    return (b.ratings?.overall || 0) - (a.ratings?.overall || 0) || a.id.localeCompare(b.id);
+  }
+
+  _pct(wins = 0, losses = 0) {
+    const total = wins + losses;
+    return total > 0 ? wins / total : 0;
+  }
+
+  _getPlayoffSeedsFromRecords(records) {
+    const result = {};
+    ['AFC', 'NFC'].forEach(conf => {
+      const confTeams = TEAMS.filter(team => team.conference === conf);
+      const divisions = { East: [], North: [], South: [], West: [] };
+      confTeams.forEach(team => divisions[team.division].push(team));
+
+      const divisionWinners = [];
+      const wildCards = [];
+      Object.keys(divisions).forEach(divName => {
+        const sortedDivision = [...divisions[divName]].sort((a, b) => this._comparePlayoffTeams(a, b, records, 'division'));
+        if (sortedDivision[0]) divisionWinners.push(sortedDivision[0]);
+        sortedDivision.slice(1).forEach(team => wildCards.push(team));
+      });
+
+      divisionWinners.sort((a, b) => this._comparePlayoffTeams(a, b, records, 'conference'));
+      wildCards.sort((a, b) => this._comparePlayoffTeams(a, b, records, 'conference'));
+      result[conf] = [...divisionWinners, ...wildCards.slice(0, 3)].map((team, index) => ({
+        ...this._teamWithRecord(team, records),
+        seed: index + 1,
+        playoffGroup: index < 4 ? 'divisionLeader' : 'wildCard',
+      }));
+    });
+    return result;
+  }
+
+  getPlayoffPicture() {
+    return this._getPlayoffSeedsFromRecords(this._getPlayedRegularRecords());
+  }
+
+  _getRemainingRegularMatches() {
+    const matches = [];
+    for (let i = Math.max(3, this.currentWeek - 1); i < Math.min(this.weeks.length, 20); i++) {
+      const weekMatches = this.weeks[i] || [];
+      weekMatches.forEach(match => {
+        if (!match || match.isPreseason || match.played) return;
+        matches.push(match);
+      });
+    }
+    return matches;
+  }
+
+  _getWinProbability(homeTeam, awayTeam) {
+    const ratingGap = (homeTeam.ratings.overall || 80) - (awayTeam.ratings.overall || 80);
+    const homeField = 2.5;
+    return Math.max(0.18, Math.min(0.82, 0.5 + ((ratingGap + homeField) * 0.018)));
+  }
+
+  _getRemainingSos(teamId) {
+    const remaining = this._getRemainingRegularMatches().filter(match => match.home.id === teamId || match.away.id === teamId);
+    if (remaining.length === 0) return 0;
+    const records = this._getPlayedRegularRecords();
+    const total = remaining.reduce((sum, match) => {
+      const opp = match.home.id === teamId ? match.away : match.home;
+      const oppRecord = records[opp.id] || { w: 0, l: 0 };
+      const oppWinPct = this._pct(oppRecord.w, oppRecord.l);
+      return sum + ((oppWinPct * 0.7) + (((opp.ratings.overall || 80) / 100) * 0.3));
+    }, 0);
+    return Math.round((total / remaining.length) * 1000) / 1000;
+  }
+
+  _getGamesBack(team, seeds, records) {
+    if (seeds.some(seed => seed.id === team.id)) return 0;
+    const cutoff = seeds[6];
+    if (!cutoff) return 0;
+    const teamRecord = records[team.id] || { w: 0, l: 0 };
+    return Math.max(0, Math.round((((cutoff.w - teamRecord.w) + (teamRecord.l - cutoff.l)) / 2) * 10) / 10);
+  }
+
+  _buildRaceStatus(team, seedIndex, odds, records, seeds) {
+    const teamOdds = odds?.[team.id] || null;
+    if (this.phase === 'playoffs' || this.phase === 'offseason') {
+      return seedIndex >= 0 ? (seedIndex === 0 ? 'z' : seedIndex < 4 ? 'y' : 'x') : 'e';
+    }
+    const gamesPlayed = (records[team.id]?.w || 0) + (records[team.id]?.l || 0);
+    const maxWins = (records[team.id]?.w || 0) + Math.max(0, 17 - gamesPlayed);
+    const cutoff = seeds[6];
+    if (teamOdds) {
+      if (teamOdds.makePlayoffs >= 100 && seedIndex === 0) return 'z';
+      if (teamOdds.divisionTitle >= 100) return 'y';
+      if (teamOdds.makePlayoffs >= 100) return 'x';
+      if (teamOdds.makePlayoffs <= 0 || (cutoff && maxWins < cutoff.w)) return 'e';
+    } else if (cutoff && maxWins < cutoff.w) {
+      return 'e';
+    }
+    return '';
+  }
+
+  getTeamTiebreakProfile(teamId) {
+    const team = TEAMS.find(t => t.id === teamId);
+    if (!team) return null;
+    const records = this._getPlayedRegularRecords();
+    const record = records[teamId] || {};
+    return {
+      ...this._teamWithRecord(team, records),
+      gamesBack: this._getGamesBack(team, this._getPlayoffSeedsFromRecords(records)[team.conference] || [], records),
+      remainingSos: this._getRemainingSos(teamId),
+      h2h: record.h2h || {},
+    };
+  }
+
+  getPlayoffRace(options = {}) {
+    const includeOdds = options.includeOdds !== false;
+    const records = this._getPlayedRegularRecords();
+    const seedsByConf = this._getPlayoffSeedsFromRecords(records);
+    const odds = includeOdds ? this.getPlayoffOdds() : {};
+    const race = {};
+
+    ['AFC', 'NFC'].forEach(conf => {
+      const seeds = seedsByConf[conf] || [];
+      const seedIds = new Set(seeds.map(team => team.id));
+      const teams = TEAMS
+        .filter(team => team.conference === conf)
+        .sort((a, b) => this._comparePlayoffTeams(a, b, records, 'conference'));
+
+      const decorate = (team, seedIndex = -1) => {
+        const fullTeam = this._teamWithRecord(team, records);
+        return {
+          ...fullTeam,
+          seed: seedIndex >= 0 ? seedIndex + 1 : null,
+          status: this._buildRaceStatus(team, seedIndex, includeOdds ? odds : null, records, seeds),
+          odds: includeOdds ? (odds[team.id] || this._emptyOdds()) : this._emptyOdds(),
+          gamesBack: this._getGamesBack(team, seeds, records),
+          remainingSos: this._getRemainingSos(team.id),
+        };
+      };
+
+      const seedTeams = seeds.map((team, index) => decorate(team, index));
+      const nonSeeded = teams.filter(team => !seedIds.has(team.id)).map(team => decorate(team));
+      race[conf] = {
+        divisionLeaders: seedTeams.slice(0, 4),
+        wildCards: seedTeams.slice(4, 7),
+        inTheHunt: nonSeeded.filter(team => team.status !== 'e').slice(0, 6),
+        eliminated: nonSeeded.filter(team => team.status === 'e'),
+        seeds: seedTeams,
+      };
+    });
+
+    return race;
+  }
+
+  _emptyOdds() {
+    return { makePlayoffs: 0, divisionTitle: 0, firstRoundBye: 0, conferenceTitle: 0, superBowl: 0 };
+  }
+
+  _getPlayoffCacheKey() {
+    const standingsKey = TEAMS.map(team => {
+      const s = this.standings[team.id] || {};
+      return `${team.id}:${s.w || 0}-${s.l || 0}-${s.pf || 0}-${s.pa || 0}`;
+    }).join('|');
+    const playedKey = this.weeks.slice(3).flatMap(week => (week || [])
+      .filter(match => match.played && match.result)
+      .map(match => `${match.id}:${match.result.homeScore}-${match.result.awayScore}`)).join('|');
+    return `${this.season}|${this.phase}|${this.currentWeek}|${standingsKey}|${playedKey}`;
+  }
+
+  getPlayoffOdds() {
+    const key = this._getPlayoffCacheKey();
+    if (this.playoffOddsCache?.key === key) return this.playoffOddsCache.odds;
+
+    const odds = this._calculatePlayoffMilestoneOdds(key);
+    this.playoffOddsCache = { key, odds };
     return odds;
+  }
+
+  calculatePlayoffOdds() {
+    const odds = this.getPlayoffOdds();
+    const makePlayoffs = {};
+    Object.keys(odds).forEach(teamId => {
+      makePlayoffs[teamId] = odds[teamId].makePlayoffs;
+    });
+    return makePlayoffs;
+  }
+
+  _calculatePlayoffMilestoneOdds(cacheKey) {
+    const SIMULATIONS = 5000;
+    const totalRegularWeeks = 20;
+    const baseOdds = {};
+    TEAMS.forEach(team => { baseOdds[team.id] = this._emptyOdds(); });
+
+    if (this.phase !== 'regular' || this.currentWeek > totalRegularWeeks) {
+      const picture = this.getPlayoffPicture();
+      [...picture.AFC, ...picture.NFC].forEach(team => {
+        if (!team) return;
+        baseOdds[team.id] = {
+          makePlayoffs: 100,
+          divisionTitle: team.seed <= 4 ? 100 : 0,
+          firstRoundBye: team.seed === 1 ? 100 : 0,
+          conferenceTitle: 0,
+          superBowl: 0,
+        };
+      });
+      this.weeks.slice(20).forEach(week => {
+        (week || []).forEach(match => {
+          if (!match?.result) return;
+          const winner = match.result.homeScore >= match.result.awayScore ? match.home : match.away;
+          if (!winner || !baseOdds[winner.id]) return;
+          if (match.type === 'Conference') baseOdds[winner.id].conferenceTitle = 100;
+          if (match.type === 'Super Bowl') {
+            baseOdds[winner.id].conferenceTitle = 100;
+            baseOdds[winner.id].superBowl = 100;
+          }
+        });
+      });
+      return baseOdds;
+    }
+
+    const baseRecords = this._getPlayedRegularRecords();
+    const remainingMatches = this._getRemainingRegularMatches().map(match => ({
+      home: match.home,
+      away: match.away,
+      homeWinProbability: this._getWinProbability(match.home, match.away),
+      expectedMargin: Math.abs((match.home.ratings.overall || 80) - (match.away.ratings.overall || 80)) * 0.8 + 3,
+    }));
+    const rng = this._createRng(this._hashString(cacheKey));
+
+    for (let sim = 0; sim < SIMULATIONS; sim++) {
+      const records = this._clonePlayoffRecords(baseRecords);
+      remainingMatches.forEach(match => {
+        const homeWon = rng() < match.homeWinProbability;
+        const margin = Math.max(1, Math.round(match.expectedMargin + (rng() * 18) - 9));
+        const winnerScore = 22 + margin;
+        const loserScore = 22;
+        this._recordPlayoffGame(
+          records,
+          match.home,
+          match.away,
+          homeWon ? winnerScore : loserScore,
+          homeWon ? loserScore : winnerScore
+        );
+      });
+
+      const seedsByConf = this._getPlayoffSeedsFromRecords(records);
+      ['AFC', 'NFC'].forEach(conf => {
+        const seeds = seedsByConf[conf] || [];
+        seeds.forEach((team, index) => {
+          baseOdds[team.id].makePlayoffs++;
+          if (index < 4) baseOdds[team.id].divisionTitle++;
+          if (index === 0) baseOdds[team.id].firstRoundBye++;
+        });
+      });
+
+      const champions = ['AFC', 'NFC'].map(conf => this._simulateConferencePlayoffs(seedsByConf[conf], rng));
+      champions.forEach(team => {
+        if (team) baseOdds[team.id].conferenceTitle++;
+      });
+      const champion = this._simulateNeutralGame(champions[0], champions[1], rng);
+      if (champion) baseOdds[champion.id].superBowl++;
+    }
+
+    Object.keys(baseOdds).forEach(teamId => {
+      Object.keys(baseOdds[teamId]).forEach(key => {
+        baseOdds[teamId][key] = Math.round((baseOdds[teamId][key] / SIMULATIONS) * 100);
+      });
+    });
+    return baseOdds;
+  }
+
+  _simulateConferencePlayoffs(seeds = [], rng) {
+    if (!seeds || seeds.length < 7) return null;
+    const seedMap = new Map(seeds.map((team, index) => [team.id, index + 1]));
+    const wcWinners = [
+      this._simulateTeamGame(seeds[1], seeds[6], rng),
+      this._simulateTeamGame(seeds[2], seeds[5], rng),
+      this._simulateTeamGame(seeds[3], seeds[4], rng),
+    ].filter(Boolean).sort((a, b) => seedMap.get(a.id) - seedMap.get(b.id));
+    const lowestSeed = wcWinners[wcWinners.length - 1];
+    const otherWinners = wcWinners.slice(0, -1);
+    const divWinners = [
+      this._simulateTeamGame(seeds[0], lowestSeed, rng),
+      this._simulateTeamGame(otherWinners[0], otherWinners[1], rng),
+    ].filter(Boolean).sort((a, b) => seedMap.get(a.id) - seedMap.get(b.id));
+    return this._simulateTeamGame(divWinners[0], divWinners[1], rng);
+  }
+
+  _simulateTeamGame(homeTeam, awayTeam, rng) {
+    if (!homeTeam) return awayTeam || null;
+    if (!awayTeam) return homeTeam || null;
+    const probability = this._getWinProbability(homeTeam, awayTeam);
+    return rng() < probability ? homeTeam : awayTeam;
+  }
+
+  _simulateNeutralGame(teamA, teamB, rng) {
+    if (!teamA) return teamB || null;
+    if (!teamB) return teamA || null;
+    const ratingGap = (teamA.ratings.overall || 80) - (teamB.ratings.overall || 80);
+    const probability = Math.max(0.18, Math.min(0.82, 0.5 + (ratingGap * 0.018)));
+    return rng() < probability ? teamA : teamB;
   }
   // DRAFT & OFFSEASON
   
@@ -2064,6 +2376,7 @@ export class LeagueEngine {
       injuredReserve: this.injuredReserve,
       randomSeed: this.randomSeed,
       rngState: this._rngState,
+      playoffOddsCache: this.playoffOddsCache,
     };
   }
 
@@ -2095,6 +2408,7 @@ export class LeagueEngine {
     this.draftHistory = data.draftHistory || [];
     this.practiceSquads = data.practiceSquads || {};
     this.injuredReserve = data.injuredReserve || {};
+    this.playoffOddsCache = data.playoffOddsCache || null;
     this.setRandomSeed(data.randomSeed || Date.now());
     if (Number.isFinite(data.rngState)) {
       this._rngState = (data.rngState >>> 0) || 1;
@@ -2117,6 +2431,7 @@ export class LeagueEngine {
   }
 
   resetGame() {
+    this.invalidatePlayoffCache();
     // Restore original TEAMS ratings that may have been mutated by startNewSeason
     this._originalTeamRatings.forEach(orig => {
       const team = TEAMS.find(t => t.id === orig.id);

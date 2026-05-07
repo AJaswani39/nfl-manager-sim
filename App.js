@@ -26,6 +26,7 @@ import SalaryCapScreen from './src/screens/SalaryCapScreen';
 import RosterScreen from './src/screens/RosterScreen';
 import ScheduleScreen from './src/screens/ScheduleScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
+import PlayoffPictureScreen from './src/screens/PlayoffPictureScreen';
 import PlayoffBracketScreen from './src/screens/PlayoffBracketScreen';
 import GamePlanScreen from './src/screens/GamePlanScreen';
 import InjuryReportScreen from './src/screens/InjuryReportScreen';
@@ -55,6 +56,7 @@ const wrappedScreens = {
   Roster: withErrorBoundary(RosterScreen),
   Schedule: withErrorBoundary(ScheduleScreen),
   Settings: withErrorBoundary(SettingsScreen),
+  PlayoffPicture: withErrorBoundary(PlayoffPictureScreen),
   PlayoffBracket: withErrorBoundary(PlayoffBracketScreen),
   GamePlan: withErrorBoundary(GamePlanScreen),
   InjuryReport: withErrorBoundary(InjuryReportScreen),
@@ -77,6 +79,7 @@ const fullscreenRoutes = [
   'Roster',
   'Schedule',
   'Settings',
+  'PlayoffPicture',
   'PlayoffBracket',
   'GamePlan',
   'InjuryReport',

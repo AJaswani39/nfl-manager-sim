@@ -147,7 +147,81 @@ export default function SeasonScreen({ route, navigation }) {
   
   const isSpoilerGame = userStats?.eliminated && oppStats && !oppStats.eliminated && league.phase === 'regular';
   const knockedOutOpponent = route.params?.knockedOutOpponent;
-  const playoffOdds = currentWeek >= 16 ? league.calculatePlayoffOdds() : {};
+  const showPlayoffRace = currentWeek >= 13;
+  const playoffOdds = showPlayoffRace ? league.calculatePlayoffOdds() : {};
+  const playoffPicture = showPlayoffRace ? league.getPlayoffPicture() : null;
+
+  const sortRaceTeams = (a, b) => b.w - a.w || (b.pf - b.pa) - (a.pf - a.pa);
+
+  const getPlayoffStatus = (team, seedIndex) => {
+    const odds = playoffOdds[team.id] || 0;
+    if (league.phase === 'playoffs' || odds === 100) return 'CLINCHED';
+    if (seedIndex >= 0) return seedIndex < 4 ? 'DIV LEAD' : 'WC';
+    if (odds >= 65) return 'LIKELY';
+    if (odds >= 25) return 'BUBBLE';
+    if (odds > 0) return 'LONG SHOT';
+    return 'OUT';
+  };
+
+  const renderRaceTeam = (team, seedIndex = -1) => {
+    const odds = playoffOdds[team.id] || 0;
+    const status = getPlayoffStatus(team, seedIndex);
+    const isSeeded = seedIndex >= 0;
+    const isDivisionLeader = seedIndex >= 0 && seedIndex < 4;
+    const oddsColor = odds >= 75 ? '#1b5e20' : odds >= 35 ? '#b26a00' : odds > 0 ? '#b71c1c' : '#6b7280';
+
+    return (
+      <View key={`${team.id}-${seedIndex}`} style={[styles.raceRow, team.id === userTeamId && styles.userRaceRow]}>
+        <View style={[styles.seedBadge, !isSeeded && styles.huntBadge]}>
+          <Text style={styles.seedText}>{isSeeded ? seedIndex + 1 : '-'}</Text>
+        </View>
+        <View style={styles.raceTeamInfo}>
+          <View style={{flexDirection:'row', alignItems:'center'}}>
+            <Text style={styles.raceTeamName}>{team.abbreviation}</Text>
+            <Text style={styles.raceTeamMeta}>{team.division}</Text>
+          </View>
+          <Text style={styles.raceRecord}>{team.w}-{team.l}  DIFF {team.pf - team.pa}</Text>
+        </View>
+        <View style={styles.raceRight}>
+          <Text style={[styles.statusTag, isDivisionLeader && styles.divisionTag]}>{status}</Text>
+          <Text style={[styles.oddsText, {color: oddsColor}]}>{odds}%</Text>
+        </View>
+      </View>
+    );
+  };
+
+  const renderConferenceRace = (conference) => {
+    const seeds = playoffPicture?.[conference] || [];
+    const seedIds = new Set(seeds.map(team => team.id));
+    const conferenceTeams = standings
+      .filter(team => team.conference === conference)
+      .sort(sortRaceTeams);
+    const inTheHunt = conferenceTeams
+      .filter(team => !seedIds.has(team.id) && (playoffOdds[team.id] || 0) > 0)
+      .slice(0, 5);
+
+    return (
+      <View key={conference} style={styles.conferenceRace}>
+        <View style={styles.conferenceHeader}>
+          <Text style={styles.conferenceTitle}>{conference}</Text>
+          <Text style={styles.conferenceSubTitle}>7 teams qualify</Text>
+        </View>
+
+        <Text style={styles.raceGroupTitle}>Division Leaders</Text>
+        {seeds.slice(0, 4).map((team, index) => renderRaceTeam(team, index))}
+
+        <Text style={styles.raceGroupTitle}>Wild Card</Text>
+        {seeds.slice(4, 7).map((team, index) => renderRaceTeam(team, index + 4))}
+
+        {inTheHunt.length > 0 && (
+          <>
+            <Text style={styles.raceGroupTitle}>In The Hunt</Text>
+            {inTheHunt.map(team => renderRaceTeam(team))}
+          </>
+        )}
+      </View>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -461,21 +535,22 @@ export default function SeasonScreen({ route, navigation }) {
           {standings.map((item, index) => <View key={item.id}>{renderStanding({item, index})}</View>)}
         </View>
 
-        {/* PLAYOFF ODDS (Week 13+) */}
-        {currentWeek >= 16 && (
+        {/* PLAYOFF PICTURE */}
+        {showPlayoffRace && (
           <View style={styles.section}>
-             <Text style={styles.sectionTitle}>Playoff Hunt (Odds to Make)</Text>
-             {league.getStandingsSorted().filter((_, i) => i < 16).map(team => {
-                const odds = playoffOdds[team.id] || 0;
-                return (
-                  <View key={team.id} style={styles.standingRow}>
-                    <Text style={styles.standingTeam}>{team.name}</Text>
-                    <Text style={{fontWeight: 'bold', color: odds > 50 ? 'green' : odds < 20 ? 'red' : 'orange'}}>
-                      {odds}%
-                    </Text>
-                  </View>
-                )
-             })}
+             <View style={styles.sectionHeaderRow}>
+                <Text style={styles.sectionTitle}>NFL-Style Playoff Picture</Text>
+                <TouchableOpacity onPress={() => navigation.navigate('PlayoffPicture')}>
+                  <Text style={styles.sectionLink}>Full Board</Text>
+                </TouchableOpacity>
+             </View>
+             <View style={styles.raceLegend}>
+                <Text style={styles.legendText}>Seed</Text>
+                <Text style={styles.legendText}>Team</Text>
+                <Text style={styles.legendText}>Status / Odds</Text>
+             </View>
+             {renderConferenceRace('AFC')}
+             {renderConferenceRace('NFC')}
           </View>
         )}
 
@@ -496,9 +571,14 @@ export default function SeasonScreen({ route, navigation }) {
         )}
 
         {/* BRACKET PREVIEW */}
-        {currentWeek >= 16 && (
+        {showPlayoffRace && (
            <View style={{margin:16, marginTop:0}}>
-              <Text style={styles.sectionTitle}>Projected Playoff Matchups</Text>
+              <View style={styles.sectionHeaderRow}>
+                <Text style={styles.sectionTitle}>Projected Playoff Matchups</Text>
+                <TouchableOpacity onPress={() => navigation.navigate('PlayoffPicture')}>
+                  <Text style={styles.sectionLink}>Odds</Text>
+                </TouchableOpacity>
+              </View>
               
               {['AFC', 'NFC'].map(conf => {
                 const teams = league.getPlayoffPicture()[conf];
@@ -594,6 +674,18 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#333',
     marginBottom: 12,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  sectionLink: {
+    color: '#1976d2',
+    fontWeight: '900',
+    fontSize: 12,
+    textTransform: 'uppercase',
   },
   matchupCard: {
     flexDirection: 'row',
@@ -705,5 +797,116 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     color: '#666',
     fontSize: 12,
+  },
+  raceLegend: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+    marginBottom: 10,
+  },
+  legendText: {
+    color: '#6b7280',
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  conferenceRace: {
+    marginTop: 12,
+    paddingTop: 10,
+    borderTopWidth: 2,
+    borderTopColor: '#111827',
+  },
+  conferenceHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  conferenceTitle: {
+    color: '#111827',
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  conferenceSubTitle: {
+    color: '#6b7280',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  raceGroupTitle: {
+    marginTop: 10,
+    marginBottom: 4,
+    color: '#374151',
+    fontSize: 12,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  raceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 9,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f2f5',
+  },
+  userRaceRow: {
+    backgroundColor: '#e3f2fd',
+    marginHorizontal: -8,
+    paddingHorizontal: 8,
+    borderRadius: 4,
+  },
+  seedBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#111827',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  huntBadge: {
+    backgroundColor: '#e5e7eb',
+  },
+  seedText: {
+    color: '#fff',
+    fontWeight: '900',
+    fontSize: 12,
+  },
+  raceTeamInfo: {
+    flex: 1,
+  },
+  raceTeamName: {
+    color: '#111827',
+    fontSize: 15,
+    fontWeight: '900',
+    marginRight: 8,
+  },
+  raceTeamMeta: {
+    color: '#6b7280',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  raceRecord: {
+    color: '#6b7280',
+    fontSize: 11,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  raceRight: {
+    alignItems: 'flex-end',
+    minWidth: 78,
+  },
+  statusTag: {
+    color: '#4b5563',
+    fontSize: 10,
+    fontWeight: '900',
+  },
+  divisionTag: {
+    color: '#0f766e',
+  },
+  oddsText: {
+    fontSize: 15,
+    fontWeight: '900',
+    marginTop: 2,
   },
 });
