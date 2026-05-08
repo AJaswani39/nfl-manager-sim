@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, SafeAreaView, FlatList, TouchableOpacity, ScrollView } from 'react-native';
 import { league } from '../engine/LeagueEngine';
 import { TEAMS } from '../data/teams';
@@ -21,26 +21,7 @@ export default function DraftScreen({ route, navigation }) {
     const [statusMessage, setStatusMessage] = useState('');
     const [scoutingPoints, setScoutingPoints] = useState(0);
 
-    useEffect(() => {
-        let timer;
-        const initializeDraft = async () => {
-            const draftComplete = league.draftOrder && league.currentPickIndex >= league.draftOrder.length;
-            if (!draftComplete && (!league.draftClass || league.draftClass.length === 0 || !league.draftOrder)) {
-                league.startDraft();
-                await StorageService.saveGame(league.getSaveData());
-            }
-
-            updateDraftState();
-            setDraftLog(getCurrentDraftLog());
-            setNeeds(league.getDraftNeeds(userTeamId));
-            timer = setTimeout(() => processCpuPicks(), 1000);
-        };
-
-        initializeDraft();
-        return () => clearTimeout(timer);
-    }, []);
-
-    const getCurrentDraftLog = () => {
+    const getCurrentDraftLog = useCallback(() => {
         return (league.draftHistory || [])
             .filter(pick => pick.season === league.season)
             .map(pick => ({
@@ -49,9 +30,9 @@ export default function DraftScreen({ route, navigation }) {
                 player: pick.player,
                 rationale: pick.rationale,
             }));
-    };
+    }, []);
 
-    const updateDraftState = () => {
+    const updateDraftState = useCallback(() => {
         const nextProspects = league.getDraftProspects ? league.getDraftProspects() : [...(league.draftClass || [])];
         const currentPickIndex = Number.isFinite(league.currentPickIndex) ? league.currentPickIndex : 0;
         setProspects(nextProspects);
@@ -65,9 +46,9 @@ export default function DraftScreen({ route, navigation }) {
         setSelectedProspectIndex(prev => (
             prev != null && prev < nextProspects.length ? prev : null
         ));
-    };
+    }, [userTeamId]);
 
-    const processCpuPicks = async () => {
+    const processCpuPicks = useCallback(async () => {
         if (!league.draftOrder || league.currentPickIndex >= league.draftOrder.length) {
             updateDraftState();
             return;
@@ -76,11 +57,30 @@ export default function DraftScreen({ route, navigation }) {
         const newPicks = league.resolveCpuPicks(userTeamId);
         if (newPicks.length > 0) {
              setDraftLog(prev => [...prev, ...newPicks]);
-             await StorageService.saveGame(league.getSaveData());
+             await StorageService.saveCurrentGame();
         }
         updateDraftState();
         setNeeds(league.getDraftNeeds(userTeamId));
-    };
+    }, [updateDraftState, userTeamId]);
+
+    useEffect(() => {
+        let timer;
+        const initializeDraft = async () => {
+            const draftComplete = league.draftOrder && league.currentPickIndex >= league.draftOrder.length;
+            if (!draftComplete && (!league.draftClass || league.draftClass.length === 0 || !league.draftOrder)) {
+                league.startDraft();
+                await StorageService.saveCurrentGame();
+            }
+
+            updateDraftState();
+            setDraftLog(getCurrentDraftLog());
+            setNeeds(league.getDraftNeeds(userTeamId));
+            timer = setTimeout(() => processCpuPicks(), 1000);
+        };
+
+        initializeDraft();
+        return () => clearTimeout(timer);
+    }, [getCurrentDraftLog, processCpuPicks, updateDraftState, userTeamId]);
 
     const handleSelectProspect = (player, index) => {
         if (!isUserTurn) {
@@ -100,7 +100,7 @@ export default function DraftScreen({ route, navigation }) {
         setStatusMessage(`Drafted ${picked.position} ${picked.name}.`);
         updateDraftState();
         setNeeds(league.getDraftNeeds(userTeamId));
-        await StorageService.saveGame(league.getSaveData());
+        await StorageService.saveCurrentGame();
         setTimeout(() => processCpuPicks(), 1000);
     };
 
@@ -113,12 +113,12 @@ export default function DraftScreen({ route, navigation }) {
         }
         setStatusMessage(`${player.name} scouting updated.`);
         updateDraftState();
-        await StorageService.saveGame(league.getSaveData());
+        await StorageService.saveCurrentGame();
     };
 
     const handleFinishOffseason = async () => {
         league.startNewSeason();
-        await StorageService.saveGame(league.getSaveData());
+        await StorageService.saveCurrentGame();
         navigation.navigate('Season', { teamId: userTeamId });
     };
 

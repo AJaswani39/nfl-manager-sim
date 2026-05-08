@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { StyleSheet, Text, View, SafeAreaView, FlatList, TouchableOpacity } from 'react-native';
 import { league } from '../engine/LeagueEngine';
 import { TEAMS } from '../data/teams';
@@ -8,23 +8,13 @@ export default function InjuryReportScreen({ route, navigation }) {
   const [filter, setFilter] = useState('my_team'); // 'my_team' | 'all'
   const [injuries, setInjuries] = useState([]);
 
-  useEffect(() => {
-    loadInjuries();
-    const unsubscribe = navigation.addListener('focus', loadInjuries);
-    return unsubscribe;
-  }, [navigation]);
-
-  useEffect(() => {
-    loadInjuries();
-  }, [filter]);
-
-  const loadInjuries = () => {
+  const loadInjuries = useCallback(() => {
     const injuredPlayers = [];
 
     // Check which players are on IR for quick lookup
     const irPlayerSet = new Set();
     const irEligibility = {};
-    Object.entries(league.injuredReserve || {}).forEach(([teamId, irList]) => {
+    Object.keys(league.injuredReserve || {}).forEach(teamId => {
       const enriched = league.getIRList(teamId);
       enriched.forEach(entry => {
         irPlayerSet.add(entry.playerId);
@@ -67,7 +57,13 @@ export default function InjuryReportScreen({ route, navigation }) {
     });
 
     setInjuries(injuredPlayers);
-  };
+  }, [filter, userTeamId]);
+
+  useEffect(() => {
+    loadInjuries();
+    const unsubscribe = navigation.addListener('focus', loadInjuries);
+    return unsubscribe;
+  }, [loadInjuries, navigation]);
 
   const getSeverityColor = (weeks) => {
     if (weeks >= 4) return '#d32f2f';

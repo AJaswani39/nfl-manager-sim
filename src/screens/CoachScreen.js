@@ -18,7 +18,7 @@ export default function CoachScreen({ route }) {
     league.setCoach(userTeamId, coach.id);
     setCurrentCoach(league.getCoach(userTeamId));
     setStatusMessage(`Hired ${coach.name}.`);
-    await StorageService.saveGame(league.getSaveData());
+    await StorageService.saveCurrentGame();
   };
 
   const renderBonusItem = (label, value) => {

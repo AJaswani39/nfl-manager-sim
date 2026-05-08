@@ -37,7 +37,7 @@ export default function FreeAgencyScreen({ route }) {
     setSelectedFreeAgentId(null);
     refreshFreeAgencyState();
     setStatusMessage(`Signed ${signed.position} ${signed.name}.`);
-    await StorageService.saveGame(league.getSaveData());
+    await StorageService.saveCurrentGame();
   };
 
   const handleCutPlayer = async (player) => {
@@ -49,7 +49,7 @@ export default function FreeAgencyScreen({ route }) {
     }
     refreshFreeAgencyState();
     setStatusMessage(`Released ${cut.position} ${cut.name}.`);
-    await StorageService.saveGame(league.getSaveData());
+    await StorageService.saveCurrentGame();
   };
 
   const renderFreeAgent = ({ item }) => {

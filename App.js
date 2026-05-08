@@ -95,7 +95,7 @@ export default function App() {
   useEffect(() => {
     const saveCurrentSlot = () => {
       if (league.userTeamId && league.slotId) {
-        StorageService.saveGame(league.getSaveData());
+        void StorageService.saveCurrentGame();
       }
     };
 

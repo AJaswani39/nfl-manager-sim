@@ -110,7 +110,7 @@ export default function HomeScreen({ navigation }) {
     league.userTeamId = teamId;
     league.slotId = targetSlot;
     league.generateSchedule();
-    await StorageService.saveGame(league.getSaveData());
+    await StorageService.saveCurrentGame();
     navigation.navigate('Season', { teamId });
   };
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { StyleSheet, Text, View, SafeAreaView, FlatList, TouchableOpacity, ScrollView } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { league } from '../engine/LeagueEngine';
@@ -18,18 +18,16 @@ export default function PracticeSquadScreen({ route }) {
   const [roster, setRoster] = useState(league.rosters[userTeamId] || []);
   const [statusMessage, setStatusMessage] = useState('');
 
-  useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', () => {
-      refreshData();
-    });
-    return unsubscribe;
-  }, [navigation, userTeamId]);
-
-  const refreshData = () => {
+  const refreshData = useCallback(() => {
     setPracticeSquad([...league.getPracticeSquad(userTeamId)]);
     setIRList([...league.getIRList(userTeamId)]);
     setRoster([...(league.rosters[userTeamId] || [])]);
-  };
+  }, [userTeamId]);
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', refreshData);
+    return unsubscribe;
+  }, [navigation, refreshData]);
 
   const handlePromote = async (player) => {
     const result = league.promoteFromPracticeSquad(userTeamId, player.id);
@@ -39,7 +37,7 @@ export default function PracticeSquadScreen({ route }) {
     }
     refreshData();
     setStatusMessage(`Promoted ${result.position} ${result.name}.`);
-    await StorageService.saveGame(league.getSaveData());
+    await StorageService.saveCurrentGame();
   };
 
   const handleDemote = async (player) => {
@@ -50,7 +48,7 @@ export default function PracticeSquadScreen({ route }) {
     }
     refreshData();
     setStatusMessage(`Demoted ${result.position} ${result.name}.`);
-    await StorageService.saveGame(league.getSaveData());
+    await StorageService.saveCurrentGame();
   };
 
   const handlePlaceOnIR = async (player) => {
@@ -66,7 +64,7 @@ export default function PracticeSquadScreen({ route }) {
     }
     refreshData();
     setStatusMessage(`Placed ${result.position} ${result.name} on IR.`);
-    await StorageService.saveGame(league.getSaveData());
+    await StorageService.saveCurrentGame();
   };
 
   const handleActivateFromIR = async (entry) => {
@@ -81,7 +79,7 @@ export default function PracticeSquadScreen({ route }) {
     }
     refreshData();
     setStatusMessage(`Activated ${result.position} ${result.name}.`);
-    await StorageService.saveGame(league.getSaveData());
+    await StorageService.saveCurrentGame();
   };
 
   const getSeverityColor = (weeksOut) => {

@@ -106,29 +106,14 @@ export const StorageService = {
     }
   },
 
-  // --- Legacy wrappers — all existing call sites continue to work unchanged ---
-
-  async saveGame(leagueData) {
-    const slotId = league.slotId || 1;
-    return this.saveSlot(slotId, leagueData);
-  },
-
-  async loadGame() {
-    const slotId = league.slotId || 1;
-    return this.loadSlot(slotId);
-  },
-
-  async hasSave() {
-    try {
-      const index = await this.getSlotIndex();
-      return Object.values(index.slots).some(s => s !== null);
-    } catch {
-      return false;
+  async saveCurrentGame(leagueInstance = league) {
+    if (!leagueInstance || typeof leagueInstance.getSaveData !== 'function') {
+      return { success: false, error: 'Invalid league instance' };
     }
+    return this.saveSlot(leagueInstance.slotId || 1, leagueInstance.getSaveData());
   },
 
-  async deleteSave() {
-    const slotId = league.slotId || 1;
-    return this.deleteSlot(slotId);
+  async deleteCurrentGame(leagueInstance = league) {
+    return this.deleteSlot(leagueInstance?.slotId || 1);
   },
 };

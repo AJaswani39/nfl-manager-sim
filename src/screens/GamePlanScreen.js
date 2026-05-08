@@ -90,13 +90,13 @@ export default function GamePlanScreen({ route, navigation }) {
   const handleSelectOffense = async (id) => {
     setOffense(id);
     league.setGamePlan(userTeamId, id, defense);
-    await StorageService.saveGame(league.getSaveData());
+    await StorageService.saveCurrentGame();
   };
 
   const handleSelectDefense = async (id) => {
     setDefense(id);
     league.setGamePlan(userTeamId, offense, id);
-    await StorageService.saveGame(league.getSaveData());
+    await StorageService.saveCurrentGame();
   };
 
   const renderOption = (option, isSelected, onSelect) => (

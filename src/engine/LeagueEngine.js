@@ -6,10 +6,10 @@ import { FreeAgencyEngine } from './FreeAgencyEngine';
 import { TrainingEngine } from './TrainingEngine';
 
 // Helper to shuffle array
-const shuffle = (array) => {
+const shuffle = (array, random = Math.random) => {
   let currentIndex = array.length, randomIndex;
   while (currentIndex != 0) {
-    randomIndex = Math.floor(Math.random() * currentIndex);
+    randomIndex = Math.floor(random() * currentIndex);
     currentIndex--;
     [array[currentIndex], array[randomIndex]] = [array[randomIndex], array[currentIndex]];
   }
@@ -413,7 +413,7 @@ export class LeagueEngine {
     // Random matchups, don't care about constraints much
     for (let w = 1; w <= 3; w++) {
         const weeklyMatches = [];
-        const teamsPool = shuffle([...TEAMS]);
+        const teamsPool = shuffle([...TEAMS], () => this._random());
         while (teamsPool.length >= 2) {
             weeklyMatches.push({ 
                 id: `pre_w${w}_${teamsPool.length}`,
@@ -432,7 +432,7 @@ export class LeagueEngine {
     // 2. REGULAR SEASON (17 Weeks)
     for (let w = 1; w <= 17; w++) {
       const weeklyMatches = [];
-      const teamsPool = shuffle([...TEAMS]);
+      const teamsPool = shuffle([...TEAMS], () => this._random());
       
       while (teamsPool.length >= 2) {
         const home = teamsPool.pop();
@@ -632,7 +632,6 @@ export class LeagueEngine {
     if (weekIndex < 0 || weekIndex >= this.weeks.length) return;
     
     const weekMatches = this.weeks[weekIndex];
-    let allPlayed = true;
 
     // Check if this is the start of Regular Season transition?
     // No, we handle transitions at end of week.
@@ -735,9 +734,6 @@ export class LeagueEngine {
         });
       });
   }
-
-// ... existing code ...
-
   calculateScore(offenseTeam, defenseTeam) {
     const base = Math.floor(this._random() * 20);
     const matchUpDiff = (offenseTeam.ratings.offense - defenseTeam.ratings.defense) / 3;

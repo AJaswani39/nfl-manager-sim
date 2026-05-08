@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { StyleSheet, Text, View, SafeAreaView, FlatList, TouchableOpacity } from 'react-native';
 import { league } from '../engine/LeagueEngine';
 import { TEAMS } from '../data/teams';
@@ -11,13 +11,7 @@ export default function ContractScreen({ route, navigation }) {
   const [filter, setFilter] = useState('all'); // 'all' | 'expiring' | 'extended'
   const [statusMessage, setStatusMessage] = useState('');
 
-  useEffect(() => {
-    loadRoster();
-    const unsubscribe = navigation.addListener('focus', loadRoster);
-    return unsubscribe;
-  }, [navigation]);
-
-  const loadRoster = () => {
+  const loadRoster = useCallback(() => {
     const players = (league.rosters[userTeamId] || []).map(p => ({
       ...p,
       contract: league.getPlayerSalary(p.id),
@@ -25,7 +19,13 @@ export default function ContractScreen({ route, navigation }) {
     }));
     players.sort((a, b) => a.contract.years - b.contract.years || b.overall - a.overall);
     setRoster(players);
-  };
+  }, [userTeamId]);
+
+  useEffect(() => {
+    loadRoster();
+    const unsubscribe = navigation.addListener('focus', loadRoster);
+    return unsubscribe;
+  }, [loadRoster, navigation]);
 
   const handleExtend = async (player) => {
     const cost = player.extensionCost;
@@ -38,7 +38,7 @@ export default function ContractScreen({ route, navigation }) {
 
     league.extendContract(userTeamId, player.id, 3, cost);
     setStatusMessage(`Extended ${player.name} for 3 years at $${cost}M/year.`);
-    await StorageService.saveGame(league.getSaveData());
+    await StorageService.saveCurrentGame();
     loadRoster();
   };
 

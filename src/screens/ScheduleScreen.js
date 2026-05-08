@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, SafeAreaView, FlatList, TouchableOpacity, ScrollView } from 'react-native';
+import { StyleSheet, Text, View, SafeAreaView, FlatList, TouchableOpacity } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { league } from '../engine/LeagueEngine';
 import { TEAMS } from '../data/teams';

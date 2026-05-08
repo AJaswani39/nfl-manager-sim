@@ -14,7 +14,7 @@ export default function TrainingScreen({ route, navigation }) {
     const focus = league.setWeeklyTraining(userTeamId, focusId);
     setSelected(focus.focusId);
     setMessage(`${focus.name} set for Week ${league.currentWeek}.`);
-    await StorageService.saveGame(league.getSaveData());
+    await StorageService.saveCurrentGame();
   };
 
   const renderEffect = (label, value) => {

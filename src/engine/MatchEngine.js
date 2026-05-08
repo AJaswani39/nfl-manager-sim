@@ -64,10 +64,11 @@ const DEFENSIVE_SCHEME_WEIGHTS = {
 
 
 export class MatchEngine {
-  constructor(homeTeam, awayTeam, homeRoster, awayRoster, isPlayoff = false, injuries = {}, homeDepthChart = null, awayDepthChart = null, homeGamePlan = null, awayGamePlan = null, userTeamId = null) {
+  constructor(homeTeam, awayTeam, homeRoster, awayRoster, isPlayoff = false, injuries = {}, homeDepthChart = null, awayDepthChart = null, homeGamePlan = null, awayGamePlan = null, userTeamId = null, random = Math.random) {
     this.homeTeam = homeTeam;
     this.awayTeam = awayTeam;
     this.isPlayoff = isPlayoff;
+    this.random = typeof random === 'function' ? random : Math.random;
     this.injuries = JSON.parse(JSON.stringify(injuries));
     this.newInjuries = {};
     this.receivedFirstHalf = null;
@@ -111,14 +112,18 @@ export class MatchEngine {
     
   }
 
+  _random() {
+      return this.random();
+  }
+
   isInjured(pid) {
       return this.injuries[pid] && this.injuries[pid].weeksOut > 0;
   }
 
   checkForInjury(player, side) {
       if (!player) return;
-      if (Math.random() < 0.015) { // 1.5% Chance
-          const weeks = Math.floor(Math.random() * 5) + 1;
+      if (this._random() < 0.015) { // 1.5% Chance
+          const weeks = Math.floor(this._random() * 5) + 1;
           this.injuries[player.id] = { weeksOut: weeks };
           this.newInjuries[player.id] = weeks;
           this.addToLog(`INJURY ALERT: ${player.name} is hurt on the play!`);
@@ -168,7 +173,7 @@ export class MatchEngine {
       // 1. AUDIBLE (User Offense Only for now)
       // 5% chance if it's a normal play
       const userIsOnOffense = this._userSide && this.state.possession === this._userSide;
-      if (userIsOnOffense && Math.random() < 0.05 && offChoice) {
+      if (userIsOnOffense && this._random() < 0.05 && offChoice) {
           this.state.pendingEvent = {
               type: 'AUDIBLE',
               title: 'Quarterback Audible',
@@ -184,7 +189,7 @@ export class MatchEngine {
 
       // 2. FALSE START (Offense Penalty)
       // 3% chance
-      if (Math.random() < 0.03) {
+      if (this._random() < 0.03) {
           this.state.ballOn = Math.max(1, this.state.ballOn - 5);
           this.state.distance += 5;
           this.addToLog("FALSE START! Offense pushed back 5 yards.");
@@ -201,7 +206,7 @@ export class MatchEngine {
 
        // 3. ENCROACHMENT (Defense Penalty)
       // 3% chance
-      if (Math.random() < 0.03) {
+      if (this._random() < 0.03) {
           this.addToLog("ENCROACHMENT! Defense jumps offside. 5 yards.");
           this.state.ballOn = Math.min(99, this.state.ballOn + 5);
           this.state.distance -= 5;
@@ -275,11 +280,10 @@ export class MatchEngine {
       const returner = this.getPlayerFromSide(receivingSide, 'KR');
 
       const kickingTeam = this.getOffenseTeam();
-      const receivingTeam = this.getDefenseTeam(); // Before possession flip
 
       if (type === 'ONSIDE') {
           // 15% chance of recovery
-          const success = Math.random() < 0.15;
+          const success = this._random() < 0.15;
           if (success) {
               this.addToLog(`ONSIDE KICK RECOVERED by ${kickingTeam.name}!`);
               this.state.ballOn = 45; // Recovered at own 45
@@ -294,23 +298,20 @@ export class MatchEngine {
           // NORMAL KICKOFF
           this.state.possession = this.state.possession === 'home' ? 'away' : 'home';
           
-          const rand = Math.random();
+          const rand = this._random();
           if (rand < 0.60) {
               // Touchback
               this.addToLog(`Kickoff! Touchback.`);
               this.state.ballOn = 25;
           } else if (rand < 0.98) {
               // Return
-              // Kick lands deep?
-              const kickDist = 65 + Math.floor(Math.random() * 10); // 65-75 yds
-              // Return distance
-              let returnYds = 15 + Math.floor(Math.random() * 20); // 15-35 yds return
+              let returnYds = 15 + Math.floor(this._random() * 20); // 15-35 yds return
               
               // Big Return Chance
-              if (Math.random() < 0.05) returnYds += 30; // Breakaway
+              if (this._random() < 0.05) returnYds += 30; // Breakaway
               
               // TD Chance
-              if (Math.random() < 0.01) {
+              if (this._random() < 0.01) {
                   this.state.ballOn = 100;
                   this.score(7);
                   this.addToLog(`KICKOFF RETURN TOUCHDOWN by ${returner.name}! INCREDIBLE!`);
@@ -319,8 +320,8 @@ export class MatchEngine {
               }
 
               // Muff Chance
-              if (Math.random() < 0.02) {
-                  if (Math.random() < 0.5) {
+              if (this._random() < 0.02) {
+                  if (this._random() < 0.5) {
                       this.addToLog(`MUFFED KICKOFF by ${returner.name}! Recovered by Kicking Team!`);
                       this.state.possession = this.state.possession === 'home' ? 'away' : 'home';
                       this.state.ballOn = 20;
@@ -333,7 +334,7 @@ export class MatchEngine {
                   return;
               }
 
-              let startYard = 20 + Math.floor(Math.random() * 15); // Own 20-35
+              let startYard = 20 + Math.floor(this._random() * 15); // Own 20-35
               if (returnYds > 40) startYard += 20; // Big return
 
               this.state.ballOn = startYard;
@@ -350,12 +351,10 @@ export class MatchEngine {
 
   performCoinToss() {
       // 50/50 Coin Toss
-      const homeWon = Math.random() > 0.5;
-      const winner = homeWon ? this.homeTeam : this.awayTeam;
+      const homeWon = this._random() > 0.5;
       // Winner elects to receive in Q1 (Simplicity)
       this.state.possession = homeWon ? 'home' : 'away';
       this.receivedFirstHalf = homeWon ? 'home' : 'away'; // Track for Q3 flip
-      const receiver = homeWon ? this.homeTeam : this.awayTeam;
       
       this.state.ballOn = 25; // Touchback start
       // Note: We can't log here easily because logs show Q1 15:00.
@@ -363,7 +362,7 @@ export class MatchEngine {
   }
 
   startOvertimeCoinToss() {
-      const homeWon = Math.random() > 0.5;
+      const homeWon = this._random() > 0.5;
       this.state.possession = homeWon ? 'home' : 'away';
       this.state.ballOn = 25;
       this.addToLog(`Overtime Coin Toss: ${homeWon ? this.homeTeam.name : this.awayTeam.name} wins and receives!`);
@@ -414,7 +413,7 @@ export class MatchEngine {
     } else if (type === 'punt') {
       const punter   = this.getPlayerFromSide(puntingSide, 'P');
       const returner = this.getPlayerFromSide(receivingSide, 'KR');
-      const puntDist = 35 + Math.floor(Math.random() * 25); // 35-60 yds
+      const puntDist = 35 + Math.floor(this._random() * 25); // 35-60 yds
       const landingSpot = this.state.ballOn + puntDist;
 
       if (landingSpot >= 100) {
@@ -424,8 +423,8 @@ export class MatchEngine {
           const pinned = landingSpot >= 95;
 
           // Muffed Catch Chance (3%)
-          if (Math.random() < 0.03) {
-               if (Math.random() < 0.5) {
+          if (this._random() < 0.03) {
+               if (this._random() < 0.5) {
                    this.addToLog(`MUFFED PUNT by ${returner.name}! Recovered by Kicking Team!`);
                    this.state.possession = this.state.possession === 'home' ? 'away' : 'home';
                    this.state.ballOn = landingSpot;
@@ -440,16 +439,16 @@ export class MatchEngine {
               newLoc = spot;
               this.addToLog(`${punter.name} pins ${this.getOffenseTeam().abbreviation} at the ${this.getYardLineText(spot)}!`);
           } else {
-              const rand = Math.random();
+              const rand = this._random();
 
               if (rand < 0.25) {
                   newLoc = 100 - landingSpot;
                   this.addToLog(`Fair catch by ${returner.name}.`);
               } else {
-                   let returnYards = -2 + Math.floor(Math.random() * 12);
-                   if (Math.random() < 0.08) returnYards += 15;
+                   let returnYards = -2 + Math.floor(this._random() * 12);
+                   if (this._random() < 0.08) returnYards += 15;
 
-                   if (Math.random() < 0.01) {
+                   if (this._random() < 0.01) {
                         this.state.ballOn = 100;
                         this.score(7);
                         this.addToLog(`PUNT RETURN TOUCHDOWN by ${returner.name}!!!`);
@@ -512,7 +511,7 @@ export class MatchEngine {
     const w = plan?.offense || null;
     const weights = OFFENSIVE_SCHEME_WEIGHTS[w] || OFFENSIVE_SCHEME_WEIGHTS.balanced;
 
-    const roll = Math.random();
+    const roll = this._random();
     let cumulative = 0;
     cumulative += weights.insideRun;
     if (roll < cumulative) return PLAY_TYPES.RUN_INSIDE;
@@ -535,7 +534,7 @@ export class MatchEngine {
     let weights = DEFENSIVE_SCHEME_WEIGHTS[w] || DEFENSIVE_SCHEME_WEIGHTS.balanced;
     weights = this.getAdaptiveDefenseWeights(weights);
 
-    const roll = Math.random();
+    const roll = this._random();
     let cumulative = 0;
     cumulative += weights.runDef;
     if (roll < cumulative) return DEFENSE_TYPES.RUN_DEFENSE;
@@ -621,14 +620,14 @@ export class MatchEngine {
           // Append any healthy pool members not in the depth chart
           pool.forEach(p => { if (!ordered.find(o => o.id === p.id)) ordered.push(p); });
 
-          if (ordered.length === 0) return pool[Math.floor(Math.random() * pool.length)];
+          if (ordered.length === 0) return pool[Math.floor(this._random() * pool.length)];
 
           // QB, K, P: always use starter
           if (positionGroup === 'QB' || positionGroup === 'K' || positionGroup === 'P') return ordered[0];
 
           // RB: starter ~70%, backup ~25%, third ~5%
           if (positionGroup === 'RB') {
-              const r = Math.random();
+              const r = this._random();
               if (ordered.length === 1 || r < 0.70) return ordered[0];
               if (ordered.length === 2 || r < 0.95) return ordered[1];
               return ordered[2] || ordered[1];
@@ -637,7 +636,7 @@ export class MatchEngine {
           // WR / DL / DB: weighted 50/30/15/5 across top 4
           const weights = [0.50, 0.30, 0.15, 0.05];
           const top = ordered.slice(0, 4);
-          let rand = Math.random() * weights.slice(0, top.length).reduce((a, b) => a + b, 0);
+          let rand = this._random() * weights.slice(0, top.length).reduce((a, b) => a + b, 0);
           for (let i = 0; i < top.length; i++) {
               rand -= weights[i];
               if (rand <= 0) return top[i];
@@ -646,7 +645,7 @@ export class MatchEngine {
       }
 
       // No depth chart — pure random from healthy pool
-      return pool[Math.floor(Math.random() * pool.length)];
+      return pool[Math.floor(this._random() * pool.length)];
   }
 
   recordStat(player, statType, value = 1) {
@@ -680,7 +679,7 @@ export class MatchEngine {
   }
 
   ratedYards(min, max, matchup, impact = 4) {
-    const roll = min + Math.floor(Math.random() * (max - min + 1));
+    const roll = min + Math.floor(this._random() * (max - min + 1));
     return roll + Math.round(matchup * impact);
   }
 
@@ -701,7 +700,7 @@ export class MatchEngine {
     const k  = this.getPlayer('OFF', 'K');
     
     // Generic tackler
-    const tackler = Math.random() < 0.5 ? dl : (Math.random() < 0.5 ? lb : db);
+    const tackler = this._random() < 0.5 ? dl : (this._random() < 0.5 ? lb : db);
 
     let yardsGained = 0;
     let description = "";
@@ -719,8 +718,8 @@ export class MatchEngine {
           yardsGained = this.ratedYards(-2, 3, matchup, 4);
           description = `${rb.name} stuffed at the line by ${dl.name}!`;
           this.recordStat(dl, 'tackles', 1);
-          if (Math.random() < this.ratedChance(0.04, -matchup, 0.05)) { 
-              if (Math.random() < 0.5) {
+          if (this._random() < this.ratedChance(0.04, -matchup, 0.05)) { 
+              if (this._random() < 0.5) {
                   turnover = true; 
                   turnoverPlayer = dl;
                   description = `FUMBLE! ${rb.name} loses the ball! Recovered by ${dl.name}!`; 
@@ -742,7 +741,7 @@ export class MatchEngine {
       case PLAY_TYPES.RUN_OUTSIDE:
         this.recordStat(rb, 'rushingAtt', 1);
         if (defChoice === DEFENSE_TYPES.BLITZ) {
-           if (Math.random() < this.ratedChance(0.30, -matchup, 0.28)) {
+           if (this._random() < this.ratedChance(0.30, -matchup, 0.28)) {
               yardsGained = this.ratedYards(-5, -2, matchup, 2); description = `${lb.name} tackles ${rb.name} for a loss!`;
               this.recordStat(lb, 'tackles', 1);
            } else {
@@ -759,7 +758,7 @@ export class MatchEngine {
       case PLAY_TYPES.RUN_DRAW:
         this.recordStat(rb, 'rushingAtt', 1);
         if (defChoice === DEFENSE_TYPES.PASS_COVERAGE) {
-           if (Math.random() < this.ratedChance(0.12, -matchup, 0.20)) {
+           if (this._random() < this.ratedChance(0.12, -matchup, 0.20)) {
              yardsGained = this.ratedYards(-3, 2, matchup, 3);
              description = `${lb.name} diagnoses the draw late and drags down ${rb.name}.`;
              this.recordStat(lb, 'tackles', 1);
@@ -771,8 +770,8 @@ export class MatchEngine {
            yardsGained = this.ratedYards(-6, -2, matchup, 2);
            description = `${dl.name} crashes down and blows up the draw play.`;
            this.recordStat(dl, 'tackles', 1);
-           if (Math.random() < this.ratedChance(0.08, -matchup, 0.06)) {
-              if (Math.random() < 0.45) {
+           if (this._random() < this.ratedChance(0.08, -matchup, 0.06)) {
+              if (this._random() < 0.45) {
                   turnover = true;
                   turnoverPlayer = dl;
                   description = `FUMBLE! ${dl.name} punches it loose on the draw and recovers!`;
@@ -786,8 +785,8 @@ export class MatchEngine {
            yardsGained = this.ratedYards(-3, 2, matchup, 3);
            description = `${rb.name} swallowed up by ${tackler.name} on the draw.`;
            this.recordStat(tackler, 'tackles', 1);
-           if (Math.random() < this.ratedChance(0.05, -matchup, 0.05)) {
-              if (Math.random() < 0.35) {
+           if (this._random() < this.ratedChance(0.05, -matchup, 0.05)) {
+              if (this._random() < 0.35) {
                   turnover = true;
                   turnoverPlayer = tackler;
                   description = `FUMBLE! ${tackler.name} rips it out from ${rb.name} and recovers!`;
@@ -804,14 +803,14 @@ export class MatchEngine {
       case PLAY_TYPES.PASS_SHORT:
         this.recordStat(qb, 'passingAtt', 1);
         if (defChoice === DEFENSE_TYPES.PASS_COVERAGE) {
-          if (Math.random() < this.ratedChance(0.58, matchup, 0.38)) { 
+          if (this._random() < this.ratedChance(0.58, matchup, 0.38)) { 
               yardsGained = this.ratedYards(2, 8, matchup, 3); 
               description = `${qb.name} connects with ${wr.name}.`; 
               this.recordStat(qb, 'passingComp', 1); this.recordStat(wr, 'receptions', 1);
           }
           else { 
              yardsGained = 0; description = `${qb.name}'s pass incomplete.`; 
-             if (Math.random() < this.ratedChance(0.05, -matchup, 0.08)) { 
+             if (this._random() < this.ratedChance(0.05, -matchup, 0.08)) { 
                  turnover = true; 
                  turnoverPlayer = lb;
                  description = `INTERCEPTED by ${lb.name}!`; 
@@ -820,10 +819,10 @@ export class MatchEngine {
              }
           }
         } else if (defChoice === DEFENSE_TYPES.BLITZ) {
-          if (Math.random() < this.ratedChance(0.20, -matchup, 0.22)) {
+          if (this._random() < this.ratedChance(0.20, -matchup, 0.22)) {
              yardsGained = this.ratedYards(-7, -4, matchup, 2); description = `SACK! ${dl.name} gets home before the short route develops.`;
              this.recordStat(dl, 'sacks', 1);
-             if (Math.random() < this.ratedChance(0.10, -matchup, 0.08)) {
+             if (this._random() < this.ratedChance(0.10, -matchup, 0.08)) {
                 turnover = true;
                 turnoverPlayer = dl;
                 description = `STRIP SACK! ${dl.name} knocks it loose and recovers!`;
@@ -842,7 +841,7 @@ export class MatchEngine {
       case PLAY_TYPES.PASS_SCREEN:
          this.recordStat(qb, 'passingAtt', 1);
          if (defChoice === DEFENSE_TYPES.BLITZ) {
-            if (Math.random() < this.ratedChance(0.13, -matchup, 0.15)) {
+            if (this._random() < this.ratedChance(0.13, -matchup, 0.15)) {
               yardsGained = this.ratedYards(-7, -4, matchup, 2);
               description = `SACK! ${dl.name} gets to ${qb.name} before the screen can set up.`;
               this.recordStat(dl, 'sacks', 1);
@@ -856,7 +855,7 @@ export class MatchEngine {
             description = `Screen sniffed out by ${tackler.name}.`;
             this.recordStat(qb, 'passingComp', 1); this.recordStat(rb, 'receptions', 1); // Completed for loss
             this.recordStat(tackler, 'tackles', 1);
-            if (Math.random() < this.ratedChance(0.05, -matchup, 0.07)) { 
+            if (this._random() < this.ratedChance(0.05, -matchup, 0.07)) { 
                 turnover = true; 
                 turnoverPlayer = dl;
                 description = `Screen pass JUMPED by ${dl.name}! INTERCEPTION!`; 
@@ -872,7 +871,7 @@ export class MatchEngine {
       case PLAY_TYPES.PASS_PLAY_ACTION:
          this.recordStat(qb, 'passingAtt', 1);
          if (defChoice === DEFENSE_TYPES.RUN_DEFENSE) {
-             if (Math.random() < this.ratedChance(0.82, matchup, 0.25)) {
+             if (this._random() < this.ratedChance(0.82, matchup, 0.25)) {
                yardsGained = this.ratedYards(9, 24, matchup, 5);
                description = `${qb.name} fakes, throws deep to ${wr.name}! Wide open!`;
                this.recordStat(qb, 'passingComp', 1); this.recordStat(wr, 'receptions', 1);
@@ -881,7 +880,7 @@ export class MatchEngine {
                description = `${db.name} recovers after the fake and breaks up the play-action shot.`;
              }
          } else if (defChoice === DEFENSE_TYPES.BLITZ) {
-             if (Math.random() < this.ratedChance(0.74, -matchup, 0.20)) {
+             if (this._random() < this.ratedChance(0.74, -matchup, 0.20)) {
                yardsGained = this.ratedYards(-8, -5, matchup, 2); description = `SACK! ${dl.name} gets to ${qb.name}!`;
                this.recordStat(dl, 'sacks', 1);
              } else {
@@ -889,8 +888,8 @@ export class MatchEngine {
                description = `${qb.name} barely gets it out to ${wr.name} behind the blitz.`;
                this.recordStat(qb, 'passingComp', 1); this.recordStat(wr, 'receptions', 1);
              }
-             if (yardsGained < 0 && Math.random() < this.ratedChance(0.15, -matchup, 0.08)) { 
-                 if (Math.random() < 0.5) {
+             if (yardsGained < 0 && this._random() < this.ratedChance(0.15, -matchup, 0.08)) { 
+                 if (this._random() < 0.5) {
                      turnover = true; 
                      turnoverPlayer = dl;
                      description = `STRIP SACK! ${qb.name} loses it! Recovered by ${dl.name}!`; 
@@ -913,14 +912,14 @@ export class MatchEngine {
       case PLAY_TYPES.PASS_DEEP:
         this.recordStat(qb, 'passingAtt', 1);
         if (defChoice === DEFENSE_TYPES.PASS_COVERAGE) {
-          if (Math.random() < this.ratedChance(0.25, matchup, 0.35)) { 
+          if (this._random() < this.ratedChance(0.25, matchup, 0.35)) { 
               yardsGained = this.ratedYards(28, 42, matchup, 6); 
               description = `Incredible catch deep by ${wr.name}!`; 
               this.recordStat(qb, 'passingComp', 1); this.recordStat(wr, 'receptions', 1);
           }
           else { 
              yardsGained = 0; description = `Deep pass to ${wr.name} incomplete.`;
-             if (Math.random() < this.ratedChance(0.11, -matchup, 0.12)) { 
+             if (this._random() < this.ratedChance(0.11, -matchup, 0.12)) { 
                  turnover = true; 
                  turnoverPlayer = db;
                  description = `INTERCEPTED deep by ${db.name}!`; 
@@ -929,11 +928,11 @@ export class MatchEngine {
              }
           }
         } else if (defChoice === DEFENSE_TYPES.BLITZ) {
-          if (Math.random() < this.ratedChance(0.38, -matchup, 0.22)) { 
+          if (this._random() < this.ratedChance(0.38, -matchup, 0.22)) { 
              yardsGained = this.ratedYards(-9, -6, matchup, 2); description = `SACKED! ${dl.name} buries ${qb.name}!`; 
              this.recordStat(dl, 'sacks', 1);
-             if (Math.random() < this.ratedChance(0.18, -matchup, 0.10)) { 
-                 if (Math.random() < 0.5) {
+             if (this._random() < this.ratedChance(0.18, -matchup, 0.10)) { 
+                 if (this._random() < 0.5) {
                      turnover = true; 
                      turnoverPlayer = dl;
                      description = `STRIP SACK! ${dl.name} forces the fumble! Recovered by Defense!`; 
@@ -941,17 +940,17 @@ export class MatchEngine {
                      description = `STRIP SACK! ${dl.name} forces the fumble but ${qb.name} recovers!`;
                  }
              }
-          } else if (Math.random() < this.ratedChance(0.18, matchup, 0.20)) { 
+          } else if (this._random() < this.ratedChance(0.18, matchup, 0.20)) { 
              yardsGained = this.ratedYards(42, 60, matchup, 6); touchdown = this.state.ballOn + yardsGained >= 100; description = `BOMB! ${qb.name} hits ${wr.name} over the blitz!`; 
              this.recordStat(qb, 'passingComp', 1); this.recordStat(wr, 'receptions', 1);
-          } else if (Math.random() < this.ratedChance(0.48, matchup, 0.18)) {
+          } else if (this._random() < this.ratedChance(0.48, matchup, 0.18)) {
              yardsGained = this.ratedYards(18, 30, matchup, 5); description = `${wr.name} finds space behind the pressure.`;
              this.recordStat(qb, 'passingComp', 1); this.recordStat(wr, 'receptions', 1);
           } else {
              yardsGained = 0; description = `${qb.name} throws deep under pressure but misses ${wr.name}.`;
           }
         } else {
-           if (Math.random() < this.ratedChance(0.58, matchup, 0.32)) { 
+           if (this._random() < this.ratedChance(0.58, matchup, 0.32)) { 
                yardsGained = this.ratedYards(18, 30, matchup, 5); description = `${wr.name} beats the coverage deep.`; 
                this.recordStat(qb, 'passingComp', 1); this.recordStat(wr, 'receptions', 1);
            }
@@ -963,9 +962,9 @@ export class MatchEngine {
          this.changePossession('punt');
          return;
 
-      case PLAY_TYPES.FG:
+      case PLAY_TYPES.FG: {
          const dist = 100 - this.state.ballOn + 17;
-         if (dist < 45 || (dist < 55 && Math.random() > 0.3)) {
+         if (dist < 45 || (dist < 55 && this._random() > 0.3)) {
             this.addToLog(`Field Goal from ${dist} yds by ${k.name} is GOOD!`);
             this.score(3);
             this.changePossession('score');
@@ -974,11 +973,12 @@ export class MatchEngine {
             this.changePossession('turnover');
          }
          return;
+      }
     }
 
     // Process Result
     if (turnover) {
-      if (Math.random() < 0.08) { // 8% chance on a turnover
+      if (this._random() < 0.08) { // 8% chance on a turnover
          this.scoreDefense(7);
          const returnerName = turnoverPlayer ? turnoverPlayer.name : "DEFENSE";
          this.addToLog(description + ` ${returnerName} RETURNS IT FOR A TOUCHDOWN!!!`);
@@ -1087,7 +1087,7 @@ export class MatchEngine {
   tickClock() {
     if (this.state.gameOver) return;
 
-    const timeBurn = 30 + Math.floor(Math.random() * 15);
+    const timeBurn = 30 + Math.floor(this._random() * 15);
     this.state.timeRemaining -= timeBurn;
 
     if (this.state.timeRemaining <= 0) {

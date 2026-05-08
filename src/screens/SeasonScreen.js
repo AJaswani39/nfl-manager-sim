@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, SafeAreaView, TouchableOpacity, ScrollView, FlatList, Platform } from 'react-native';
+import { StyleSheet, Text, View, SafeAreaView, TouchableOpacity, ScrollView, Platform } from 'react-native';
 import { league } from '../engine/LeagueEngine';
 import { TEAMS } from '../data/teams';
 import { StorageService } from '../services/StorageService';
@@ -39,7 +39,7 @@ export default function SeasonScreen({ route, navigation }) {
       setStandings(league.getStandingsSorted());
       
       // Auto-save after each game
-      StorageService.saveGame(league.getSaveData());
+      void StorageService.saveCurrentGame();
       
       // Show result feedback
       const oppId = result.homeId === userTeamId ? result.awayId : result.homeId;
@@ -52,11 +52,10 @@ export default function SeasonScreen({ route, navigation }) {
         opponent: oppTeam ? oppTeam.abbreviation : 'OPP'
       });
     }
-  }, [route.params?.result]);
+  }, [navigation, route.params, userTeamId]);
 
   // Helper: Get user's match for this week
   const getNextMatch = () => {
-    // if (league.currentWeek > 17) return null; // REMOVED LIMIT
     if (league.currentWeek > league.weeks.length) return null; // Safety check
     const weekMatches = league.weeks[league.currentWeek - 1];
     return weekMatches.find(m => m.home.id === userTeamId || m.away.id === userTeamId);
@@ -65,8 +64,6 @@ export default function SeasonScreen({ route, navigation }) {
   const nextMatch = getNextMatch();
 
   const handleSimulateWeek = async () => {
-    // if (league.currentWeek > 17) return; // REMOVED LIMIT
-    
     // Capture the result of the user's game before simulating
     const match = getNextMatch();
     
@@ -75,7 +72,7 @@ export default function SeasonScreen({ route, navigation }) {
     // Update state
     setCurrentWeek(league.currentWeek);
     setStandings(league.getStandingsSorted());
-    await StorageService.saveGame(league.getSaveData());
+    await StorageService.saveCurrentGame();
 
     // Show result
     if (match && match.result) {
@@ -100,7 +97,7 @@ export default function SeasonScreen({ route, navigation }) {
     setStandings(league.getStandingsSorted());
     
     // Auto-save
-    await StorageService.saveGame(league.getSaveData());
+    await StorageService.saveCurrentGame();
     
     // Show result feedback
     if (match.result) {
@@ -582,7 +579,7 @@ export default function SeasonScreen({ route, navigation }) {
                     for(let i=0; i<4; i++) league.simulateWeek(league.currentWeek - 1);
                     setCurrentWeek(league.currentWeek);
                     setStandings(league.getStandingsSorted());
-                    await StorageService.saveGame(league.getSaveData());
+                    await StorageService.saveCurrentGame();
                 }}>
                   <Text style={styles.simButtonText}>QUICK SIM (4w)</Text>
                 </TouchableOpacity>

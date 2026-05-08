@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { StyleSheet, Text, View, SafeAreaView, ScrollView, TouchableOpacity } from 'react-native';
 import { league } from '../engine/LeagueEngine';
 import { TEAMS } from '../data/teams';
@@ -25,20 +25,20 @@ export default function TeamStatsScreen({ route, navigation }) {
   const [stats, setStats] = useState(null);
   const [tab, setTab] = useState('offense');
 
-  useEffect(() => {
-    loadStats();
-    const unsubscribe = navigation.addListener('focus', loadStats);
-    return unsubscribe;
-  }, [navigation]);
-
-  const loadStats = () => {
+  const loadStats = useCallback(() => {
     const teamStats = league.getTeamSeasonStats(userTeamId);
     const ranks = {};
     STAT_CATEGORIES.forEach(cat => {
       ranks[cat.key] = league.getTeamStatRank(userTeamId, cat.key);
     });
     setStats({ ...teamStats, ranks });
-  };
+  }, [userTeamId]);
+
+  useEffect(() => {
+    loadStats();
+    const unsubscribe = navigation.addListener('focus', loadStats);
+    return unsubscribe;
+  }, [loadStats, navigation]);
 
   if (!stats) return null;
 

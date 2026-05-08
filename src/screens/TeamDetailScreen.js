@@ -13,7 +13,7 @@ export default function TeamDetailScreen({ route, navigation }) {
     league.resetGame();
     league.userTeamId = team.id;
     league.generateSchedule();
-    await StorageService.saveGame(league.getSaveData());
+    await StorageService.saveCurrentGame();
     navigation.navigate('Season', { teamId: team.id });
   };
 

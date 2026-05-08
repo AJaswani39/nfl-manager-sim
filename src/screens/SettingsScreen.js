@@ -18,7 +18,7 @@ export default function SettingsScreen({ route }) {
       setConfirmAction('delete');
       return;
     }
-    await StorageService.deleteSave();
+    await StorageService.deleteCurrentGame();
     navigation.reset({ index: 0, routes: [{ name: 'Home' }] });
   };
 

@@ -56,7 +56,7 @@ export default function TradeScreen({ route }) {
     if (!tradeResult?.willAccept) return;
 
     league.executeTrade(userTeamId, selectedPartner, offeredPlayers, requestedPlayers);
-    await StorageService.saveGame(league.getSaveData());
+    await StorageService.saveCurrentGame();
     setOfferedPlayers([]);
     setRequestedPlayers([]);
     setTradeResult(null);

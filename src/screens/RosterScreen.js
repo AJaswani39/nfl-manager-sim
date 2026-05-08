@@ -57,7 +57,7 @@ export default function RosterScreen({ route }) {
     : 0;
 
   // Depth chart handlers
-  const handleMoveUp = (position, index) => {
+  const handleMoveUp = async (position, index) => {
     if (index === 0) return;
     const chart = { ...depthChart };
     const arr = [...(chart[position] || [])];
@@ -65,10 +65,10 @@ export default function RosterScreen({ route }) {
     chart[position] = arr;
     league.setDepthOrder(userTeamId, position, arr);
     setDepthChart({ ...chart });
-    StorageService.saveGame(league.getSaveData());
+    await StorageService.saveCurrentGame();
   };
 
-  const handleMoveDown = (position, index) => {
+  const handleMoveDown = async (position, index) => {
     const chart = { ...depthChart };
     const arr = [...(chart[position] || [])];
     if (index >= arr.length - 1) return;
@@ -76,7 +76,7 @@ export default function RosterScreen({ route }) {
     chart[position] = arr;
     league.setDepthOrder(userTeamId, position, arr);
     setDepthChart({ ...chart });
-    StorageService.saveGame(league.getSaveData());
+    await StorageService.saveCurrentGame();
   };
 
   const getPositionColor = (pos) => {

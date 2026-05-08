@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, Text, View, SafeAreaView, TouchableOpacity, ScrollView, Animated, Modal } from 'react-native';
+import React, { useState, useRef } from 'react';
+import { StyleSheet, Text, View, SafeAreaView, TouchableOpacity, ScrollView, Modal } from 'react-native';
 import { MatchEngine, PLAY_TYPES, DEFENSE_TYPES } from '../engine/MatchEngine';
 import { TEAMS } from '../data/teams';
 import { league } from '../engine/LeagueEngine';
@@ -136,7 +136,7 @@ export default function MatchScreen({ route, navigation }) {
 
     if (!resultSavedRef.current) {
       league.applyGameResult(result, stats, newInjuries);
-      await StorageService.saveGame(league.getSaveData());
+      await StorageService.saveCurrentGame();
       resultSavedRef.current = true;
     }
     
