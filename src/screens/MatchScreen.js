@@ -7,8 +7,8 @@ import { StorageService } from '../services/StorageService';
 
 export default function MatchScreen({ route, navigation }) {
   const { homeId, awayId, isPlayoff, userTeamId, injuries } = route.params;
-  const homeTeam = TEAMS.find(t => t.id === homeId);
-  const awayTeam = TEAMS.find(t => t.id === awayId);
+  const homeTeam = league.getTeamWithTrainingModifiers(homeId) || TEAMS.find(t => t.id === homeId);
+  const awayTeam = league.getTeamWithTrainingModifiers(awayId) || TEAMS.find(t => t.id === awayId);
 
   // We keep the engine instance in a ref so it persists across renders without re-initializing
   const engineRef = useRef(new MatchEngine(

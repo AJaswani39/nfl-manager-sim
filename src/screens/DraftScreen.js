@@ -19,6 +19,7 @@ export default function DraftScreen({ route, navigation }) {
     const [needs, setNeeds] = useState([]);
     const [selectedProspectIndex, setSelectedProspectIndex] = useState(null);
     const [statusMessage, setStatusMessage] = useState('');
+    const [scoutingPoints, setScoutingPoints] = useState(0);
 
     useEffect(() => {
         let timer;
@@ -46,13 +47,15 @@ export default function DraftScreen({ route, navigation }) {
                 type: 'pick',
                 teamId: pick.teamId,
                 player: pick.player,
+                rationale: pick.rationale,
             }));
     };
 
     const updateDraftState = () => {
-        const nextProspects = [...(league.draftClass || [])];
+        const nextProspects = league.getDraftProspects ? league.getDraftProspects() : [...(league.draftClass || [])];
         const currentPickIndex = Number.isFinite(league.currentPickIndex) ? league.currentPickIndex : 0;
         setProspects(nextProspects);
+        setScoutingPoints(league.getDraftScoutingPoints ? league.getDraftScoutingPoints() : 0);
         setDraftOver(Boolean(league.draftOrder && currentPickIndex >= league.draftOrder.length));
         setIsUserTurn(Boolean(
             league.draftOrder &&
@@ -81,10 +84,10 @@ export default function DraftScreen({ route, navigation }) {
 
     const handleSelectProspect = (player, index) => {
         if (!isUserTurn) {
-            setStatusMessage("CPU teams are still picking. Your pick will unlock when you are on the clock.");
-            return;
+            setStatusMessage("CPU teams are still picking. You can scout now, then draft when you're on the clock.");
+        } else {
+            setStatusMessage('');
         }
-        setStatusMessage('');
         setSelectedProspectIndex(index);
     };
 
@@ -101,6 +104,18 @@ export default function DraftScreen({ route, navigation }) {
         setTimeout(() => processCpuPicks(), 1000);
     };
 
+    const handleScoutProspect = async (player) => {
+        if (!player) return;
+        const report = league.scoutProspect ? league.scoutProspect(player.id) : null;
+        if (!report) {
+            setStatusMessage(player.scoutLevel >= 3 ? `${player.name} is fully scouted.` : 'No scouting points remaining.');
+            return;
+        }
+        setStatusMessage(`${player.name} scouting updated.`);
+        updateDraftState();
+        await StorageService.saveGame(league.getSaveData());
+    };
+
     const handleFinishOffseason = async () => {
         league.startNewSeason();
         await StorageService.saveGame(league.getSaveData());
@@ -114,7 +129,7 @@ export default function DraftScreen({ route, navigation }) {
     };
 
     const renderProspect = ({ item, index }) => {
-        const potColor = POTENTIAL_COLORS[item.potential] || '#888';
+        const potColor = POTENTIAL_COLORS[item.visiblePotential] || '#888';
         const fillsNeed = isNeedPosition(item.position);
         const isSelected = selectedProspectIndex === index;
         return (
@@ -135,15 +150,15 @@ export default function DraftScreen({ route, navigation }) {
                         {fillsNeed && <View style={styles.needDot} />}
                     </View>
                     <Text style={styles.pDetails}>{item.position} | Age: {item.age}</Text>
-                    <Text style={styles.pScouting}>
-                        {item.strength || 'Athlete'} | Comp: {item.comparison || '—'}
-                    </Text>
+                    <Text style={styles.pScouting}>{item.visibleStrength || item.strength || 'Athlete'}</Text>
+                    <Text style={styles.pProjection}>Potential: {item.projectedPotential || item.potential || '?'}</Text>
                 </View>
                 <View style={{alignItems:'flex-end'}}>
-                    <Text style={styles.pRating}>{item.overall}</Text>
+                    <Text style={styles.pRating}>{item.projectedOverall || item.overall}</Text>
                     <View style={[styles.potBadge, {borderColor: potColor}]}>
-                        <Text style={[styles.potText, {color: potColor}]}>{item.potential || '?'}</Text>
+                        <Text style={[styles.potText, {color: potColor}]}>{item.visiblePotential || item.potential || '?'}</Text>
                     </View>
+                    <Text style={styles.scoutLevel}>SCOUT {item.scoutLevel || 0}/3</Text>
                     {isSelected && <Text style={styles.selectedLabel}>SELECTED</Text>}
                 </View>
             </TouchableOpacity>
@@ -276,23 +291,40 @@ export default function DraftScreen({ route, navigation }) {
                         />
                     </View>
                     <View style={styles.rightPanel}>
-                        <Text style={styles.sectionHeader}>Draft Board</Text>
-                        {isUserTurn && selectedProspect && (
+                        <View style={styles.boardHeader}>
+                            <Text style={styles.sectionHeader}>Draft Board</Text>
+                            <Text style={styles.scoutPoints}>Scout Pts: {scoutingPoints}</Text>
+                        </View>
+                        {selectedProspect && (
                             <View style={styles.selectionCard}>
                                 <Text style={styles.selectionLabel}>Selected Prospect</Text>
                                 <Text style={styles.selectionName}>{selectedProspect.position} {selectedProspect.name}</Text>
                                 <Text style={styles.selectionMeta}>
-                                    {selectedProspect.overall} OVR | Potential {selectedProspect.potential || '?'}
+                                    OVR {selectedProspect.projectedOverall || selectedProspect.overall} | Potential {selectedProspect.projectedPotential || selectedProspect.potential || '?'}
                                 </Text>
                                 <Text style={styles.selectionScout}>
-                                    {selectedProspect.strength || 'Athlete'} | Comp: {selectedProspect.comparison || '—'}
+                                    {selectedProspect.visibleStrength || selectedProspect.strength || 'Athlete'} | Comp: {selectedProspect.visibleComparison || selectedProspect.comparison || '—'}
                                 </Text>
                                 <TouchableOpacity
-                                    style={styles.draftBtn}
-                                    onPress={() => handleDraftPlayer(selectedProspect, selectedProspectIndex)}
+                                    style={[
+                                        styles.scoutBtn,
+                                        (scoutingPoints <= 0 || selectedProspect.scoutLevel >= 3) && styles.disabledBtn
+                                    ]}
+                                    onPress={() => handleScoutProspect(selectedProspect)}
+                                    disabled={scoutingPoints <= 0 || selectedProspect.scoutLevel >= 3}
                                 >
-                                    <Text style={styles.draftBtnText}>DRAFT PLAYER</Text>
+                                    <Text style={styles.scoutBtnText}>
+                                        {selectedProspect.scoutLevel >= 3 ? 'FULLY SCOUTED' : 'SCOUT PROSPECT'}
+                                    </Text>
                                 </TouchableOpacity>
+                                {isUserTurn && (
+                                    <TouchableOpacity
+                                        style={styles.draftBtn}
+                                        onPress={() => handleDraftPlayer(selectedProspect, selectedProspectIndex)}
+                                    >
+                                        <Text style={styles.draftBtnText}>DRAFT PLAYER</Text>
+                                    </TouchableOpacity>
+                                )}
                             </View>
                         )}
                         <FlatList
@@ -304,6 +336,11 @@ export default function DraftScreen({ route, navigation }) {
                                     <View style={styles.logItem}>
                                         <Text style={styles.logTeam}>{team ? team.abbreviation : 'UNK'}</Text>
                                         <Text style={styles.logPlayer}>{item.player.position} {item.player.name}</Text>
+                                        {item.rationale && (
+                                            <Text style={styles.logRationale}>
+                                                {item.rationale === 'need' ? 'Need fit' : 'Board value'}
+                                            </Text>
+                                        )}
                                     </View>
                                 );
                             }}
@@ -351,6 +388,8 @@ const styles = StyleSheet.create({
     rightPanel: { flex: 0.4, backgroundColor: '#2d3436' },
 
     sectionHeader: { padding: 10, backgroundColor: '#000', color: '#ccc', fontWeight: 'bold' },
+    boardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#000' },
+    scoutPoints: { color: '#feca57', fontSize: 12, fontWeight: '900', paddingRight: 10 },
     statusText: {
         color: '#58a6ff',
         fontSize: 12,
@@ -369,9 +408,11 @@ const styles = StyleSheet.create({
     pName: { color: '#fff', fontSize: 15, fontWeight: 'bold' },
     pDetails: { color: '#aaa', fontSize: 11, marginTop: 1 },
     pScouting: { color: '#6ab04c', fontSize: 10, marginTop: 2, fontStyle: 'italic' },
+    pProjection: { color: '#aaa', fontSize: 10, marginTop: 1 },
     pRating: { color: '#feca57', fontSize: 18, fontWeight: 'bold' },
     potBadge: { borderWidth: 1, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1, marginTop: 3 },
     potText: { fontSize: 10, fontWeight: '800' },
+    scoutLevel: { color: '#888', fontSize: 9, fontWeight: '800', marginTop: 3 },
     selectedLabel: { color: '#feca57', fontSize: 9, fontWeight: '900', marginTop: 4 },
     needDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#feca57' },
 
@@ -380,12 +421,16 @@ const styles = StyleSheet.create({
     selectionName: { color: '#fff', fontSize: 16, fontWeight: '900' },
     selectionMeta: { color: '#feca57', fontSize: 12, fontWeight: '700', marginTop: 4 },
     selectionScout: { color: '#aaa', fontSize: 11, marginTop: 4, marginBottom: 10 },
+    scoutBtn: { backgroundColor: '#feca57', padding: 10, borderRadius: 6, alignItems: 'center', marginBottom: 8 },
+    scoutBtnText: { color: '#1e272e', fontSize: 12, fontWeight: '900' },
+    disabledBtn: { opacity: 0.45 },
     draftBtn: { backgroundColor: '#10ac84', padding: 10, borderRadius: 6, alignItems: 'center' },
     draftBtnText: { color: '#fff', fontSize: 13, fontWeight: '900' },
 
     logItem: { padding: 8, borderBottomWidth: 1, borderColor: '#444' },
     logTeam: { color: '#feca57', fontWeight: 'bold', fontSize: 12 },
     logPlayer: { color: '#fff', fontSize: 12 },
+    logRationale: { color: '#8bd5ff', fontSize: 10, fontWeight: '700', marginTop: 2 },
 
     // Team Needs
     needsTitle: { color: '#feca57', fontSize: 18, fontWeight: '900', letterSpacing: 1, marginBottom: 4 },

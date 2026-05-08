@@ -33,6 +33,7 @@ import InjuryReportScreen from './src/screens/InjuryReportScreen';
 import TeamStatsScreen from './src/screens/TeamStatsScreen';
 import ContractScreen from './src/screens/ContractScreen';
 import PracticeSquadScreen from './src/screens/PracticeSquadScreen';
+import TrainingScreen from './src/screens/TrainingScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -63,6 +64,7 @@ const wrappedScreens = {
   TeamStats: withErrorBoundary(TeamStatsScreen),
   Contracts: withErrorBoundary(ContractScreen),
   PracticeSquad: withErrorBoundary(PracticeSquadScreen),
+  Training: withErrorBoundary(TrainingScreen),
 };
 
 const fullscreenRoutes = [
@@ -86,6 +88,7 @@ const fullscreenRoutes = [
   'TeamStats',
   'Contracts',
   'PracticeSquad',
+  'Training',
 ];
 
 export default function App() {

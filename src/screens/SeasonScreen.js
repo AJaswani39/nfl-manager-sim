@@ -144,6 +144,8 @@ export default function SeasonScreen({ route, navigation }) {
   // Opponent ID
   const oppId = nextMatch ? (nextMatch.home.id === userTeamId ? nextMatch.away.id : nextMatch.home.id) : null;
   const oppStats = oppId ? standings.find(s => s.id === oppId) : null;
+  const opponentReport = oppId ? league.getOpponentScoutingReport(userTeamId, oppId) : null;
+  const currentTraining = league.getWeeklyTraining(userTeamId);
   
   const isSpoilerGame = userStats?.eliminated && oppStats && !oppStats.eliminated && league.phase === 'regular';
   const knockedOutOpponent = route.params?.knockedOutOpponent;
@@ -360,6 +362,17 @@ export default function SeasonScreen({ route, navigation }) {
             </TouchableOpacity>
 
             <TouchableOpacity
+              style={{flexDirection:'row', alignItems:'center', justifyContent:'space-between', padding:10, backgroundColor:'#1e1e1e', borderRadius:8, marginBottom:16, borderLeftWidth: 4, borderColor: '#2dd4bf'}}
+              onPress={() => navigation.navigate('Training', { userTeamId })}
+            >
+                <View>
+                    <Text style={{color:'#fff', fontWeight:'bold', fontSize: 16}}>WEEKLY TRAINING</Text>
+                    <Text style={{color:'#888', fontSize:12}}>Focus: {currentTraining.name}</Text>
+                </View>
+                <Text style={{color:'#2dd4bf', fontSize: 20}}>→</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
               style={{flexDirection:'row', alignItems:'center', justifyContent:'space-between', padding:10, backgroundColor:'#1e1e1e', borderRadius:8, marginBottom:16, borderLeftWidth: 4, borderColor: '#ff7043'}}
               onPress={() => navigation.navigate('PracticeSquad', { userTeamId })}
             >
@@ -457,6 +470,75 @@ export default function SeasonScreen({ route, navigation }) {
                 </View>
               </View>
             ) : <Text style={{marginBottom:10, fontStyle:'italic'}}>No match this week (Bye or eliminated)</Text>}
+
+            {opponentReport && (
+              <View style={styles.scoutingCard}>
+                <View style={styles.scoutingHeader}>
+                  <View>
+                    <Text style={styles.scoutingEyebrow}>Opponent Report</Text>
+                    <Text style={styles.scoutingTitle}>
+                      {opponentReport.opponent.abbreviation} {opponentReport.record.w}-{opponentReport.record.l}
+                    </Text>
+                  </View>
+                  <TouchableOpacity onPress={() => navigation.navigate('GamePlan', { userTeamId })}>
+                    <Text style={styles.scoutingLink}>Adjust Plan</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.reportGrid}>
+                  <View style={styles.reportCell}>
+                    <Text style={styles.reportLabel}>Offense</Text>
+                    <Text style={styles.reportValue}>{opponentReport.tendencies.offense}</Text>
+                  </View>
+                  <View style={styles.reportCell}>
+                    <Text style={styles.reportLabel}>Defense</Text>
+                    <Text style={styles.reportValue}>{opponentReport.tendencies.defense}</Text>
+                  </View>
+                  <View style={styles.reportCell}>
+                    <Text style={styles.reportLabel}>PF Rank</Text>
+                    <Text style={styles.reportValue}>#{opponentReport.ranks.scoringRank}</Text>
+                  </View>
+                  <View style={styles.reportCell}>
+                    <Text style={styles.reportLabel}>PA Rank</Text>
+                    <Text style={styles.reportValue}>#{opponentReport.ranks.defenseRank}</Text>
+                  </View>
+                </View>
+
+                <View style={styles.reportColumn}>
+                  <Text style={styles.reportGroupTitle}>Strengths</Text>
+                  {opponentReport.opponentStrengths.map(item => (
+                    <Text key={item} style={styles.reportBullet}>+ {item}</Text>
+                  ))}
+                </View>
+
+                <View style={styles.reportColumn}>
+                  <Text style={styles.reportGroupTitle}>Attack Points</Text>
+                  {opponentReport.vulnerabilities.map(item => (
+                    <Text key={item} style={styles.reportBullet}>- {item}</Text>
+                  ))}
+                </View>
+
+                {opponentReport.injuries.length > 0 && (
+                  <View style={styles.injuryStrip}>
+                    <Text style={styles.injuryStripTitle}>Injuries</Text>
+                    <Text style={styles.injuryStripText}>
+                      {opponentReport.injuries.map(player => `${player.position} ${player.name} (${player.weeksOut}w)`).join('  |  ')}
+                    </Text>
+                  </View>
+                )}
+
+                <View style={styles.recommendationRow}>
+                  <View style={styles.recommendationPill}>
+                    <Text style={styles.recommendationLabel}>Call</Text>
+                    <Text style={styles.recommendationValue}>{opponentReport.recommendations.offense}</Text>
+                  </View>
+                  <View style={styles.recommendationPill}>
+                    <Text style={styles.recommendationLabel}>Defend</Text>
+                    <Text style={styles.recommendationValue}>{opponentReport.recommendations.defense}</Text>
+                  </View>
+                </View>
+              </View>
+            )}
 
             {/* Play Button */}
             {nextMatch && !nextMatch.played ? (
@@ -695,6 +777,118 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
     marginBottom: 16,
+  },
+  scoutingCard: {
+    backgroundColor: '#101827',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 16,
+  },
+  scoutingHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  scoutingEyebrow: {
+    color: '#93c5fd',
+    fontSize: 11,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  scoutingTitle: {
+    color: '#fff',
+    fontSize: 17,
+    fontWeight: '900',
+    marginTop: 2,
+  },
+  scoutingLink: {
+    color: '#feca57',
+    fontSize: 12,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  reportGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 10,
+  },
+  reportCell: {
+    flexGrow: 1,
+    flexBasis: '22%',
+    backgroundColor: '#172033',
+    borderRadius: 8,
+    padding: 8,
+  },
+  reportLabel: {
+    color: '#94a3b8',
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  reportValue: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '900',
+    marginTop: 3,
+  },
+  reportColumn: {
+    marginTop: 8,
+  },
+  reportGroupTitle: {
+    color: '#f8fafc',
+    fontSize: 12,
+    fontWeight: '900',
+    marginBottom: 3,
+    textTransform: 'uppercase',
+  },
+  reportBullet: {
+    color: '#cbd5e1',
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  injuryStrip: {
+    marginTop: 10,
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: '#3f1d1d',
+  },
+  injuryStripTitle: {
+    color: '#fecaca',
+    fontSize: 11,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  injuryStripText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  recommendationRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
+  },
+  recommendationPill: {
+    flex: 1,
+    backgroundColor: '#0f766e',
+    borderRadius: 8,
+    padding: 9,
+  },
+  recommendationLabel: {
+    color: '#ccfbf1',
+    fontSize: 10,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  recommendationValue: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '900',
+    marginTop: 2,
   },
   teamSide: {
     flex: 1,

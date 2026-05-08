@@ -1,5 +1,9 @@
 import { TEAMS } from '../data/teams';
 import { ROSTERS } from '../data/rosters';
+import { ContractEngine } from './ContractEngine';
+import { DraftEngine } from './DraftEngine';
+import { FreeAgencyEngine } from './FreeAgencyEngine';
+import { TrainingEngine } from './TrainingEngine';
 
 // Helper to shuffle array
 const shuffle = (array) => {
@@ -38,6 +42,7 @@ export class LeagueEngine {
     this.draftHistory = []; // [{ season, pick, teamId, player: { name, position, overall } }]
     this.practiceSquads = {}; // { teamId: [playerObj, ...] } — practice squad roster
     this.injuredReserve = {}; // { teamId: [{ playerId, player, weekPlaced, minWeeks }] }
+    this.trainingFocus = {}; // { teamId: { focusId, weekSet, season } }
     this.currentWeek = 1;
     this.season = 1;
     this.slotId = null;
@@ -55,6 +60,7 @@ export class LeagueEngine {
     this.initializeGamePlans();
     this.initializePracticeSquads();
     this.initializeInjuredReserve();
+    this.initializeTraining();
   }
 
   setRandomSeed(seed) {
@@ -185,6 +191,10 @@ export class LeagueEngine {
     return this.playerIndex[playerId] || null;
   }
 
+  findTeamById(teamId) {
+    return TEAMS.find(team => team.id === teamId) || null;
+  }
+
   initializeStandings() {
     TEAMS.forEach(team => {
       this.standings[team.id] = { w: 0, l: 0, pf: 0, pa: 0, matches: [] };
@@ -283,28 +293,6 @@ export class LeagueEngine {
     return coach.bonuses[type] || 0;
   }
 
-  // SALARY CAP SYSTEM
-  initializeSalaries() {
-    const SALARY_CAP = 200; // $200M cap
-    
-    TEAMS.forEach(team => {
-      this.teamCaps[team.id] = { spent: 0, cap: SALARY_CAP };
-    });
-
-    // Assign initial salaries based on overall rating
-    Object.keys(ROSTERS).forEach(teamId => {
-      let spent = 0;
-      ROSTERS[teamId].forEach(player => {
-        const salary = this.calculateSalary(player.overall, player.position);
-        this.salaries[player.id] = { amount: salary, years: 3 };
-        spent += salary;
-      });
-      if (this.teamCaps[teamId]) {
-        this.teamCaps[teamId].spent = spent;
-      }
-    });
-  }
-
   // DEPTH CHART SYSTEM
   initializeDepthCharts() {
     const CHART_POSITIONS = ['QB', 'RB', 'WR', 'TE', 'OL', 'DL', 'LB', 'DB', 'K', 'P'];
@@ -386,81 +374,6 @@ export class LeagueEngine {
     Object.keys(this.depthCharts[teamId]).forEach(pos => {
       this.depthCharts[teamId][pos] = this.depthCharts[teamId][pos].filter(id => id !== playerId);
     });
-  }
-
-  calculateSalary(overall, position) {
-    // Base salary from overall
-    let base = Math.floor((overall - 60) * 0.5); // 0-20M base
-    
-    // Position premium
-    if (position === 'QB') base = Math.floor(base * 1.8);
-    else if (['WR', 'CB', 'DL'].includes(position)) base = Math.floor(base * 1.2);
-    
-    return Math.max(1, Math.min(45, base)); // $1M min, $45M max
-  }
-
-  getTeamCap(teamId) {
-    return this.teamCaps[teamId] || { spent: 0, cap: 200 };
-  }
-
-  getPlayerSalary(playerId) {
-    return this.salaries[playerId] || { amount: 1, years: 1 };
-  }
-
-  getCapSpace(teamId) {
-    const cap = this.getTeamCap(teamId);
-    return cap.cap - cap.spent;
-  }
-
-  getExpiringContracts(teamId) {
-    const roster = this.rosters[teamId] || [];
-    return roster.filter(player => {
-      const contract = this.getPlayerSalary(player.id);
-      return contract.years <= 1;
-    }).map(player => ({
-      ...player,
-      contract: this.getPlayerSalary(player.id),
-    }));
-  }
-
-  extendContract(teamId, playerId, years, salary) {
-    this.salaries[playerId] = { amount: salary, years };
-    this.updateTeamSpending(teamId);
-  }
-
-  calculateExtensionCost(player) {
-    const baseSalary = this.calculateSalary(player.overall, player.position);
-    // Extension premium: 10-20% above base depending on age
-    const ageFactor = player.age <= 27 ? 1.2 : player.age <= 30 ? 1.1 : 1.0;
-    return Math.max(1, Math.floor(baseSalary * ageFactor));
-  }
-
-  decrementContractYears() {
-    Object.keys(this.salaries).forEach(playerId => {
-      const contract = this.salaries[playerId];
-      if (contract && contract.years > 0) {
-        contract.years -= 1;
-      }
-    });
-  }
-
-  getExpiredContractPlayers(teamId) {
-    const roster = this.rosters[teamId] || [];
-    return roster.filter(player => {
-      const contract = this.salaries[player.id];
-      return contract && contract.years <= 0;
-    });
-  }
-
-  updateTeamSpending(teamId) {
-    const roster = this.rosters[teamId] || [];
-    let spent = 0;
-    roster.forEach(player => {
-      spent += this.getPlayerSalary(player.id).amount;
-    });
-    if (this.teamCaps[teamId]) {
-      this.teamCaps[teamId].spent = spent;
-    }
   }
 
   // FRANCHISE HISTORY
@@ -755,6 +668,8 @@ export class LeagueEngine {
       }
       this.distributeStats(match.home.id, homeScore);
       this.distributeStats(match.away.id, awayScore);
+      this.rollSimulatedTrainingInjury(match.home.id);
+      this.rollSimulatedTrainingInjury(match.away.id);
     });
 
     this.currentWeek++;
@@ -827,9 +742,10 @@ export class LeagueEngine {
     const base = Math.floor(this._random() * 20);
     const matchUpDiff = (offenseTeam.ratings.offense - defenseTeam.ratings.defense) / 3;
     const planMod = this.getGamePlanScoreModifier(offenseTeam.id, defenseTeam.id);
+    const trainingMod = this.getTrainingScoreModifier(offenseTeam.id, defenseTeam.id);
     const offCoachBonus = this.getCoachBonus(offenseTeam.id, 'offense');
     const defCoachBonus = this.getCoachBonus(defenseTeam.id, 'defense');
-    let score = 17 + base + matchUpDiff + planMod + offCoachBonus - defCoachBonus;
+    let score = 17 + base + matchUpDiff + planMod + trainingMod + offCoachBonus - defCoachBonus;
     if (this._random() > 0.95) score += 14;
     if (this._random() < 0.05) score = 0;
     return Math.max(0, Math.floor(score));
@@ -921,6 +837,20 @@ export class LeagueEngine {
         remainingPassTD -= tdShare;
       });
     }
+  }
+
+  rollSimulatedTrainingInjury(teamId) {
+    const roster = (this.rosters[teamId] || []).filter(player => !this.playerState[player.id]?.weeksOut);
+    if (roster.length === 0) return null;
+
+    const chance = Math.max(0.01, 0.035 + this.getTrainingInjuryModifier(teamId));
+    if (this._random() >= chance) return null;
+
+    const player = roster[Math.floor(this._random() * roster.length)];
+    const weeksOut = 1 + Math.floor(this._random() * 4);
+    this.playerState[player.id] = { weeksOut };
+    this.addNews(`${player.name} (${player.position}) suffered a training-related injury and will miss ${weeksOut} week${weeksOut > 1 ? 's' : ''}.`, 'injury');
+    return { player, weeksOut };
   }
 
   updateStandings(teamId, pointsFor, pointsAgainst) {
@@ -1024,6 +954,80 @@ export class LeagueEngine {
     all.sort((a, b) => isLowerBetter ? a[statKey] - b[statKey] : b[statKey] - a[statKey]);
     const rank = all.findIndex(s => s.teamId === teamId) + 1;
     return rank;
+  }
+
+  getOpponentScoutingReport(userTeamId, opponentTeamId) {
+    const userTeam = TEAMS.find(t => t.id === userTeamId);
+    const opponent = TEAMS.find(t => t.id === opponentTeamId);
+    if (!userTeam || !opponent) return null;
+
+    const opponentStats = this.getTeamSeasonStats(opponentTeamId);
+    const userStats = this.getTeamSeasonStats(userTeamId);
+    const opponentPlan = this.getGamePlan(opponentTeamId);
+    const opponentRoster = this.rosters[opponentTeamId] || [];
+    const injuredPlayers = opponentRoster.filter(player => this.playerState[player.id]?.weeksOut > 0);
+    const passingRank = this.getTeamStatRank(opponentTeamId, 'passingYards');
+    const rushingRank = this.getTeamStatRank(opponentTeamId, 'rushingYards');
+    const defenseRank = this.getTeamStatRank(opponentTeamId, 'pointsAgainst');
+    const sackRank = this.getTeamStatRank(opponentTeamId, 'sacks');
+    const scoringRank = this.getTeamStatRank(opponentTeamId, 'pointsFor');
+
+    const opponentStrengths = [];
+    if (opponent.ratings.offense >= opponent.ratings.defense + 3) opponentStrengths.push('Offensive roster edge');
+    if (opponent.ratings.defense >= opponent.ratings.offense + 3) opponentStrengths.push('Defensive roster edge');
+    if (passingRank <= 10) opponentStrengths.push(`Top ${passingRank} passing volume`);
+    if (rushingRank <= 10) opponentStrengths.push(`Top ${rushingRank} rushing volume`);
+    if (defenseRank <= 10) opponentStrengths.push(`Top ${defenseRank} scoring defense`);
+    if (sackRank <= 10) opponentStrengths.push(`Top ${sackRank} pass rush`);
+    if (opponentStrengths.length === 0) opponentStrengths.push('Balanced profile');
+
+    const vulnerabilities = [];
+    if (defenseRank >= 23) vulnerabilities.push('Allows points');
+    if (sackRank >= 23) vulnerabilities.push('Limited pass rush');
+    if (opponent.ratings.defense <= userTeam.ratings.offense - 4) vulnerabilities.push('Can be attacked by your offense');
+    if (injuredPlayers.length >= 2) vulnerabilities.push(`${injuredPlayers.length} injured players`);
+    if (vulnerabilities.length === 0) vulnerabilities.push('Few obvious weaknesses');
+
+    let suggestedOffense = 'balanced';
+    if (opponentPlan.defense === 'blitz_heavy') suggestedOffense = 'spread';
+    else if (defenseRank >= 20 || opponent.ratings.defense < 78) suggestedOffense = 'pass_heavy';
+    else if (opponentPlan.defense === 'conservative') suggestedOffense = 'run_heavy';
+
+    let suggestedDefense = 'balanced';
+    if (passingRank <= rushingRank - 6 || opponentPlan.offense === 'pass_heavy') suggestedDefense = 'conservative';
+    else if (rushingRank <= passingRank - 6 || opponentPlan.offense === 'run_heavy') suggestedDefense = 'aggressive';
+    else if (scoringRank <= 8 && userStats.sacks > opponentStats.sacks) suggestedDefense = 'blitz_heavy';
+
+    const planNames = {
+      run_heavy: 'Run Heavy',
+      balanced: 'Balanced',
+      pass_heavy: 'Pass Heavy',
+      spread: 'Spread',
+      aggressive: 'Aggressive',
+      conservative: 'Conservative',
+      blitz_heavy: 'Blitz Heavy',
+    };
+
+    return {
+      opponent,
+      record: this.standings[opponentTeamId] || { w: 0, l: 0, pf: 0, pa: 0 },
+      ranks: { passingRank, rushingRank, defenseRank, sackRank, scoringRank },
+      tendencies: {
+        offense: planNames[opponentPlan.offense] || 'Balanced',
+        defense: planNames[opponentPlan.defense] || 'Balanced',
+      },
+      opponentStrengths: opponentStrengths.slice(0, 3),
+      vulnerabilities: vulnerabilities.slice(0, 3),
+      injuries: injuredPlayers.slice(0, 3).map(player => ({
+        name: player.name,
+        position: player.position,
+        weeksOut: this.playerState[player.id]?.weeksOut || 0,
+      })),
+      recommendations: {
+        offense: planNames[suggestedOffense] || 'Balanced',
+        defense: planNames[suggestedDefense] || 'Balanced',
+      },
+    };
   }
 
   calculatePlayerScore(stats, position) {
@@ -1654,213 +1658,6 @@ export class LeagueEngine {
     }
   }
 
-  generateDraftClass() {
-     const positions = ['QB', 'RB', 'WR', 'TE', 'OL', 'DL', 'LB', 'DB'];
-     const firstNames = ['DeAndre', 'Marcus', 'Caleb', 'Trevor', 'Kenny', 'Jalen', 'Sauce', 'Tyreek', 'Justin', 'Patrick', 'Joe', 'Bryce', 'CJ', 'Drake', 'Brock', 'Aidan', 'Will', 'Devon', 'Jayden', 'Malik'];
-     const lastNames = ['Smith', 'Johnson', 'Williams', 'Jones', 'Brown', 'Davis', 'Miller', 'Wilson', 'Moore', 'Taylor', 'Anderson', 'Thomas', 'Jackson', 'White', 'Harris', 'Martin', 'Robinson', 'Clark', 'Lewis', 'Walker'];
-     const potentials = ['A+', 'A', 'B+', 'B', 'C+', 'C', 'D'];
-     const potentialWeights = [0.03, 0.07, 0.15, 0.30, 0.20, 0.15, 0.10];
-     const strengthsByPos = {
-       QB: ['Arm Strength', 'Pocket Awareness', 'Mobility', 'Deep Ball Accuracy', 'Leadership'],
-       RB: ['Vision', 'Breakaway Speed', 'Pass Catching', 'Power Running', 'Elusiveness'],
-       WR: ['Route Running', 'Deep Threat', 'Contested Catches', 'YAC Ability', 'Hands'],
-       TE: ['Blocking', 'Red Zone Target', 'Seam Routes', 'Versatility', 'Size'],
-       OL: ['Pass Protection', 'Run Blocking', 'Athleticism', 'Anchor Strength', 'Technique'],
-       DL: ['Pass Rush', 'Bull Rush', 'Interior Disruption', 'Edge Speed', 'Motor'],
-       LB: ['Tackling', 'Coverage Skills', 'Blitz Ability', 'Sideline-to-Sideline', 'Instincts'],
-       DB: ['Ball Skills', 'Man Coverage', 'Zone Coverage', 'Tackling', 'Speed'],
-     };
-     const comparisons = {
-       QB: ['Patrick Mahomes', 'Josh Allen', 'Lamar Jackson', 'Joe Burrow', 'Jalen Hurts'],
-       RB: ['Derrick Henry', 'Saquon Barkley', 'Christian McCaffrey', 'Josh Jacobs', 'Breece Hall'],
-       WR: ["Ja'Marr Chase", 'Justin Jefferson', 'Tyreek Hill', 'CeeDee Lamb', 'Amon-Ra St. Brown'],
-       TE: ['Travis Kelce', 'Mark Andrews', 'George Kittle', 'TJ Hockenson', 'Sam LaPorta'],
-       OL: ['Penei Sewell', 'Rashawn Slater', 'Tristan Wirfs', 'Joe Alt', 'Paris Johnson Jr.'],
-       DL: ['Myles Garrett', 'Micah Parsons', 'Chris Jones', 'Aidan Hutchinson', 'Jalen Carter'],
-       LB: ['Fred Warner', 'Roquan Smith', 'Devin White', 'Daiyan Henley', 'Patrick Queen'],
-       DB: ['Sauce Gardner', 'Devon Witherspoon', 'Patrick Surtain II', 'Jaire Alexander', 'Derwin James'],
-     };
-
-     this.draftClass = [];
-     const prospectCount = TEAMS.length * 3;
-     for(let i=0; i<prospectCount; i++) {
-         const pos = positions[Math.floor(this._random() * positions.length)];
-         const overall = 65 + Math.floor(this._random() * 25); // 65-90
-         // Weighted potential selection
-         const potRoll = this._random();
-         let cumulative = 0;
-         let potential = 'C';
-         for (let j = 0; j < potentials.length; j++) {
-           cumulative += potentialWeights[j];
-           if (potRoll < cumulative) { potential = potentials[j]; break; }
-         }
-         // Higher overall prospects tend to have better potential
-         if (overall >= 83 && this._random() < 0.5) potential = potentials[Math.floor(this._random() * 3)]; // A+, A, or B+
-         const posStrengths = strengthsByPos[pos] || ['Athleticism'];
-         const strength = posStrengths[Math.floor(this._random() * posStrengths.length)];
-         const posComps = comparisons[pos] || ['Unknown'];
-         const comparison = posComps[Math.floor(this._random() * posComps.length)];
-
-         this.draftClass.push({
-             id: `rookie_${Date.now()}_${i}`,
-             name: `${firstNames[Math.floor(this._random()*firstNames.length)]} ${lastNames[Math.floor(this._random()*lastNames.length)]}`,
-             position: pos,
-             overall: overall,
-             age: 21 + Math.floor(this._random()*3),
-             potential: potential,
-             strength: strength,
-             comparison: comparison,
-         });
-     }
-     this.draftClass.sort((a,b) => b.overall - a.overall);
-  }
-
-  getDraftNeeds(teamId) {
-    const roster = this.rosters[teamId] || [];
-    const positions = ['QB', 'RB', 'WR', 'TE', 'OL', 'DL', 'LB', 'DB'];
-    const needs = positions.map(pos => {
-      const posPlayers = roster.filter(p => p.position === pos);
-      const count = posPlayers.length;
-      const avgOvr = count > 0 ? Math.round(posPlayers.reduce((s, p) => s + p.overall, 0) / count) : 0;
-      const bestOvr = count > 0 ? Math.max(...posPlayers.map(p => p.overall)) : 0;
-      // Need score: fewer players + lower average = higher need
-      let needScore = (3 - Math.min(count, 3)) * 20 + Math.max(0, 80 - avgOvr);
-      return { position: pos, count, avgOvr, bestOvr, needScore };
-    });
-    needs.sort((a, b) => b.needScore - a.needScore);
-    return needs;
-  }
-
-  startDraft() {
-     this.generateDraftClass();
-     
-     // Generate Order (Reverse Standings)
-     const sortedTeams = this.getStandingsSorted().reverse(); // Worst teams first
-     const baseOrder = sortedTeams.map(t => t.id);
-     this.draftOrder = [];
-     for (let round = 0; round < 3; round++) {
-       this.draftOrder.push(...baseOrder);
-     }
-     this.currentPickIndex = 0;
-  }
-
-  resolveCpuPicks(userTeamId) {
-     const displayLog = [];
-     
-     while (this.currentPickIndex < this.draftOrder.length) {
-         const teamId = this.draftOrder[this.currentPickIndex];
-         if (teamId === userTeamId) {
-             return displayLog; // Stop and let user pick
-         }
-         
-         // CPU Pick: Best available
-         const pick = this.draftClass.shift();
-         if (pick) {
-            pick.stats = {}; // Init stats
-            if (!this.rosters[teamId]) this.rosters[teamId] = [];
-            this.rosters[teamId].push(pick);
-            this._indexAddPlayer(pick, teamId);
-            this.addToDepthChart(teamId, pick);
-
-            displayLog.push({ type: 'pick', teamId: teamId, player: pick });
-            this.draftHistory.push({ season: this.season, pick: this.currentPickIndex + 1, teamId, player: { name: pick.name, position: pick.position, overall: pick.overall, id: pick.id } });
-         }
-         this.currentPickIndex++;
-     }
-     return displayLog;
-  }
-
-  userSelectPlayer(userTeamId, playerIndex) {
-      if (!this.draftClass || playerIndex < 0 || playerIndex >= this.draftClass.length) return null;
-      const pick = this.draftClass.splice(playerIndex, 1)[0];
-      if (!pick) return null;
-
-      pick.stats = {};
-      if (!this.rosters[userTeamId]) this.rosters[userTeamId] = [];
-      this.rosters[userTeamId].push(pick);
-      this._indexAddPlayer(pick, userTeamId);
-      this.addToDepthChart(userTeamId, pick);
-
-      this.draftHistory.push({ season: this.season, pick: this.currentPickIndex + 1, teamId: userTeamId, player: { name: pick.name, position: pick.position, overall: pick.overall, id: pick.id } });
-      this.currentPickIndex++; // Move past user
-      return pick;
-  }
-
-  // FREE AGENCY LOGIC
-  generateFreeAgents() {
-    // Generate some random free agents each offseason
-    const positions = ['QB', 'RB', 'WR', 'TE', 'OL', 'DL', 'LB', 'DB'];
-    const firstNames = ['Mike', 'Chris', 'David', 'Tyler', 'Brandon', 'Jason', 'Ryan', 'Kevin', 'Matt', 'Alex'];
-    const lastNames = ['Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis', 'Rodriguez', 'Martinez', 'Anderson'];
-    
-    const newFAs = [];
-    for (let i = 0; i < 15; i++) {
-      const pos = positions[Math.floor(this._random() * positions.length)];
-      const rating = 60 + Math.floor(this._random() * 25); // 60-85 range (veterans)
-      const age = 26 + Math.floor(this._random() * 8); // 26-33 range
-      
-      newFAs.push({
-        id: `fa_${Date.now()}_${i}`,
-        name: `${firstNames[Math.floor(this._random() * firstNames.length)]} ${lastNames[Math.floor(this._random() * lastNames.length)]}`,
-        position: pos,
-        overall: rating,
-        age: age,
-        stats: {},
-      });
-    }
-    
-    // Keep existing FAs that weren't signed (up to 20 total)
-    this.freeAgents = [...this.freeAgents, ...newFAs].slice(0, 30);
-    this.freeAgents.sort((a, b) => b.overall - a.overall);
-  }
-
-  getFreeAgents(positionFilter = null) {
-    if (!positionFilter) return this.freeAgents;
-    return this.freeAgents.filter(p => p.position === positionFilter);
-  }
-
-  signFreeAgent(teamId, playerId) {
-    const playerIndex = this.freeAgents.findIndex(p => p.id === playerId);
-    if (playerIndex === -1) return null;
-    
-    const player = this.freeAgents.splice(playerIndex, 1)[0];
-    
-    if (!this.rosters[teamId]) this.rosters[teamId] = [];
-    this.rosters[teamId].push(player);
-    this._indexAddPlayer(player, teamId);
-
-    // Initialize stats
-    if (!this.playerStats[player.id]) {
-      this.playerStats[player.id] = {
-        passingYards: 0, passingTDs: 0, passingAtt: 0, passingComp: 0,
-        rushingYards: 0, rushingTDs: 0, rushingAtt: 0,
-        receivingYards: 0, receivingTDs: 0, receptions: 0,
-        tackles: 0, sacks: 0, interceptions: 0
-      };
-    }
-
-    this.addToDepthChart(teamId, player);
-    this.addNews(`${player.name} (${player.position}) signed with ${teamId}.`, 'transaction');
-    return player;
-  }
-
-  cutPlayer(teamId, playerId) {
-    const roster = this.rosters[teamId];
-    if (!roster) return null;
-
-    const playerIndex = roster.findIndex(p => p.id === playerId);
-    if (playerIndex === -1) return null;
-
-    const player = roster.splice(playerIndex, 1)[0];
-    this._indexRemovePlayer(player.id);
-    this.removeFromDepthChart(teamId, playerId);
-    this.freeAgents.push(player);
-    this.freeAgents.sort((a, b) => b.overall - a.overall);
-
-    this.addNews(`${player.name} (${player.position}) was released by ${teamId}.`, 'transaction');
-    return player;
-  }
-
   // --- PRACTICE SQUAD ---
   initializePracticeSquads() {
     const positions = ['QB', 'RB', 'WR', 'TE', 'OL', 'DL', 'LB', 'DB', 'K', 'P'];
@@ -2188,7 +1985,7 @@ export class LeagueEngine {
           const roster = this.rosters[teamId];
           const kept = [];
           const coach = this.getCoach(teamId);
-          const devBonus = (coach && coach.bonuses && coach.bonuses.developmentBonus) || 0;
+          const devBonus = ((coach && coach.bonuses && coach.bonuses.developmentBonus) || 0) + this.getTrainingDevelopmentBonus(teamId);
           let totalOvr = 0;
 
           roster.forEach(p => {
@@ -2343,6 +2140,8 @@ export class LeagueEngine {
       this.draftClass = null;
       this.draftOrder = null;
       this.currentPickIndex = 0;
+      this.draftScouting = null;
+      this.trainingFocus = {};
   }
 
   // SAVE/LOAD GAME
@@ -2362,6 +2161,7 @@ export class LeagueEngine {
       draftClass: this.draftClass,
       draftOrder: this.draftOrder,
       currentPickIndex: this.currentPickIndex,
+      draftScouting: this.draftScouting,
       freeAgents: this.freeAgents,
       coaches: this.coaches,
       salaries: this.salaries,
@@ -2374,6 +2174,7 @@ export class LeagueEngine {
       draftHistory: this.draftHistory,
       practiceSquads: this.practiceSquads,
       injuredReserve: this.injuredReserve,
+      trainingFocus: this.trainingFocus,
       randomSeed: this.randomSeed,
       rngState: this._rngState,
       playoffOddsCache: this.playoffOddsCache,
@@ -2396,6 +2197,7 @@ export class LeagueEngine {
     this.draftClass = data.draftClass;
     this.draftOrder = data.draftOrder;
     this.currentPickIndex = data.currentPickIndex;
+    this.draftScouting = data.draftScouting || null;
     this.freeAgents = data.freeAgents || [];
     this.coaches = data.coaches || {};
     this.salaries = data.salaries || {};
@@ -2408,6 +2210,7 @@ export class LeagueEngine {
     this.draftHistory = data.draftHistory || [];
     this.practiceSquads = data.practiceSquads || {};
     this.injuredReserve = data.injuredReserve || {};
+    this.trainingFocus = data.trainingFocus || {};
     this.playoffOddsCache = data.playoffOddsCache || null;
     this.setRandomSeed(data.randomSeed || Date.now());
     if (Number.isFinite(data.rngState)) {
@@ -2427,6 +2230,7 @@ export class LeagueEngine {
     // Ensure all teams have practice squads and IR (handles saves from before this feature)
     this.initializePracticeSquads();
     this.initializeInjuredReserve();
+    if (!this.trainingFocus) this.initializeTraining();
     return true;
   }
 
@@ -2456,6 +2260,7 @@ export class LeagueEngine {
     this.draftClass = null;
     this.draftOrder = null;
     this.currentPickIndex = 0;
+    this.draftScouting = null;
     this.freeAgents = [];
     this.coaches = {};
     this.salaries = {};
@@ -2466,6 +2271,7 @@ export class LeagueEngine {
     this.draftHistory = [];
     this.practiceSquads = {};
     this.injuredReserve = {};
+    this.trainingFocus = {};
     this._standingsDirty = true;
     this._cachedStandings = null;
     this.initializeStandings();
@@ -2477,8 +2283,17 @@ export class LeagueEngine {
     this.initializeGamePlans();
     this.initializePracticeSquads();
     this.initializeInjuredReserve();
+    this.initializeTraining();
   }
 }
+
+Object.assign(
+  LeagueEngine.prototype,
+  ContractEngine,
+  DraftEngine,
+  FreeAgencyEngine,
+  TrainingEngine,
+);
 
 export const league = new LeagueEngine();
 league.generateSchedule();
