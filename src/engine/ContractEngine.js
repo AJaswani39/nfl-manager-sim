@@ -1,7 +1,6 @@
 import { TEAMS } from '../data/teams';
 import { ROSTERS } from '../data/rosters';
-
-const SALARY_CAP = 200;
+import { SALARY_CAP, MAX_SALARY, MIN_SALARY } from './constants';
 
 export const ContractEngine = {
   initializeSalaries() {
@@ -28,7 +27,7 @@ export const ContractEngine = {
     if (position === 'QB') base = Math.floor(base * 1.8);
     else if (['WR', 'CB', 'DL'].includes(position)) base = Math.floor(base * 1.2);
 
-    return Math.max(1, Math.min(45, base));
+    return Math.max(MIN_SALARY, Math.min(MAX_SALARY, base));
   },
 
   getTeamCap(teamId) {

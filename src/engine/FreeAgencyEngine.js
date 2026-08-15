@@ -1,27 +1,5 @@
-const FREE_AGENT_POSITIONS = ['QB', 'RB', 'WR', 'TE', 'OL', 'DL', 'LB', 'DB'];
+import { FIRST_NAMES, LAST_NAMES, DRAFT_POSITIONS as FREE_AGENT_POSITIONS, blankPlayerStats, pickFrom } from './util';
 
-const FIRST_NAMES = ['Mike', 'Chris', 'David', 'Tyler', 'Brandon', 'Jason', 'Ryan', 'Kevin', 'Matt', 'Alex'];
-const LAST_NAMES = ['Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis', 'Rodriguez', 'Martinez', 'Anderson'];
-
-const blankStats = () => ({
-  passingYards: 0,
-  passingTDs: 0,
-  passingAtt: 0,
-  passingComp: 0,
-  rushingYards: 0,
-  rushingTDs: 0,
-  rushingAtt: 0,
-  receivingYards: 0,
-  receivingTDs: 0,
-  receptions: 0,
-  tackles: 0,
-  sacks: 0,
-  interceptions: 0,
-});
-
-function pickFrom(list, random) {
-  return list[Math.floor(random() * list.length)];
-}
 
 export const FreeAgencyEngine = {
   generateFreeAgents() {
@@ -59,7 +37,7 @@ export const FreeAgencyEngine = {
     this._indexAddPlayer(player, teamId);
 
     if (!this.playerStats[player.id]) {
-      this.playerStats[player.id] = blankStats();
+      this.playerStats[player.id] = blankPlayerStats();
     }
 
     this.addToDepthChart(teamId, player);
