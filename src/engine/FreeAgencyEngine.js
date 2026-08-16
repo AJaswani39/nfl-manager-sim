@@ -1,4 +1,5 @@
-import { FIRST_NAMES, LAST_NAMES, DRAFT_POSITIONS as FREE_AGENT_POSITIONS, blankPlayerStats, pickFrom } from './util';
+import { FIRST_NAMES, LAST_NAMES, DRAFT_POSITIONS as FREE_AGENT_POSITIONS } from './constants';
+import { blankPlayerStats, pickFrom } from './util';
 
 
 export const FreeAgencyEngine = {

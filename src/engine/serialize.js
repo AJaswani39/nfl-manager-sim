@@ -36,39 +36,43 @@ export const SAVE_FIELDS = [
   'playoffOddsCache',
 ];
 
-const DEFAULTS = {
-  weeks: [],
-  standings: {},
-  playerStats: {},
-  playerState: {},
-  news: [],
-  rosters: () => JSON.parse(JSON.stringify(ROSTERS)),
-  currentWeek: 1,
-  phase: 'preseason',
-  userTeamId: undefined,
-  season: 1,
-  slotId: null,
-  draftClass: null,
-  draftOrder: null,
-  currentPickIndex: 0,
-  draftScouting: null,
-  freeAgents: [],
-  coaches: {},
-  salaries: {},
-  teamCaps: {},
-  franchiseHistory: [],
-  superBowlWinner: null,
-  awards: null,
-  depthCharts: {},
-  gamePlans: {},
-  draftHistory: [],
-  practiceSquads: {},
-  injuredReserve: {},
-  trainingFocus: {},
-  randomSeed: undefined,
-  rngState: undefined,
-  playoffOddsCache: null,
-};
+// Fresh defaults per call so two deserializations never share mutable state.
+// Reference types (objects/arrays) are created anew each time; primitives are fine.
+function getDefaults() {
+  return {
+    weeks: [],
+    standings: {},
+    playerStats: {},
+    playerState: {},
+    news: [],
+    rosters: JSON.parse(JSON.stringify(ROSTERS)),
+    currentWeek: 1,
+    phase: 'preseason',
+    userTeamId: undefined,
+    season: 1,
+    slotId: null,
+    draftClass: null,
+    draftOrder: null,
+    currentPickIndex: 0,
+    draftScouting: null,
+    freeAgents: [],
+    coaches: {},
+    salaries: {},
+    teamCaps: {},
+    franchiseHistory: [],
+    superBowlWinner: null,
+    awards: null,
+    depthCharts: {},
+    gamePlans: {},
+    draftHistory: [],
+    practiceSquads: {},
+    injuredReserve: {},
+    trainingFocus: {},
+    randomSeed: undefined,
+    rngState: undefined,
+    playoffOddsCache: null,
+  };
+}
 
 export function serializeLeague(league) {
   const data = { schemaVersion: SAVE_SCHEMA_VERSION };
@@ -80,11 +84,12 @@ export function serializeLeague(league) {
 
 export function deserializeLeague(league, data) {
   if (!data) return false;
+  const defaults = getDefaults();
   SAVE_FIELDS.forEach((key) => {
-    league[key] = data[key] !== undefined ? data[key] : DEFAULTS[key];
+    league[key] = data[key] !== undefined ? data[key] : defaults[key];
   });
-  // Rehydrate roster from base data when no save payload present
-  if (!data.rosters) {
+  // Ensure roster exists even if the save payload omitted it.
+  if (!league.rosters || !Array.isArray(league.rosters)) {
     league.rosters = JSON.parse(JSON.stringify(ROSTERS));
   }
   league.season = data.season || 1;

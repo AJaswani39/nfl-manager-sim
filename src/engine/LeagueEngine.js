@@ -6,7 +6,8 @@ import { FreeAgencyEngine } from './FreeAgencyEngine';
 import { TrainingEngine } from './TrainingEngine';
 import { serializeLeague, deserializeLeague } from './serialize';
 import { notify } from './leagueStore';
-import { shuffle, pickFrom, blankPlayerStats, getTeamById, DEPTH_POSITIONS, FIRST_NAMES, LAST_NAMES, PRACTICE_SQUAD_SIZE } from './util';
+import { shuffle, pickFrom, blankPlayerStats, getTeamById } from './util';
+import { DEPTH_POSITIONS, FIRST_NAMES, LAST_NAMES, PRACTICE_SQUAD_SIZE } from './constants';
 import { PRESEASON_WEEKS, TOTAL_WEEKS, TRADE_DEADLINE_WEEK, SIMULATION_COUNT, INJURY_CHANCE } from './constants';
 
 export class LeagueEngine {
@@ -2162,18 +2163,20 @@ export class LeagueEngine {
   }
 }
 
-// Wire the standalone engine modules onto the league instance. Each engine is a
-// plain object of methods that rely on `this` being the league, so we attach them
-// here in one explicit place rather than polluting the class prototype. This keeps
-// the dependency surface visible and avoids silent mixin collisions.
-function attachEngines(instance) {
+// Wire the standalone engine modules onto the LeagueEngine prototype. Each engine
+// is a plain object of methods that rely on `this` being the league instance, so we
+// attach them here in one explicit place (instead of scattering Object.assign calls).
+// Attaching to the prototype (before construction) lets the constructor call engine
+// methods such as initializeSalaries()/initializeTraining().
+function attachEngines(target) {
   [ContractEngine, DraftEngine, FreeAgencyEngine, TrainingEngine].forEach((engine) => {
     Object.keys(engine).forEach((name) => {
-      instance[name] = engine[name];
+      target[name] = engine[name];
     });
   });
 }
 
+attachEngines(LeagueEngine.prototype);
+
 export const league = new LeagueEngine();
-attachEngines(league);
 league.generateSchedule();

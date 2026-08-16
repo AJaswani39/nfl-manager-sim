@@ -1,5 +1,6 @@
 import { TEAMS } from '../data/teams';
-import { DRAFT_POSITIONS, FIRST_NAMES, LAST_NAMES, pickFrom, clamp } from './util';
+import { DRAFT_POSITIONS, FIRST_NAMES, LAST_NAMES } from './constants';
+import { pickFrom, clamp } from './util';
 
 const POTENTIALS = ['A+', 'A', 'B+', 'B', 'C+', 'C', 'D'];
 const POTENTIAL_WEIGHTS = [0.03, 0.07, 0.15, 0.30, 0.20, 0.15, 0.10];
