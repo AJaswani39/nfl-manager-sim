@@ -1,18 +1,5 @@
 import { TEAMS } from '../data/teams';
-
-const DRAFT_POSITIONS = ['QB', 'RB', 'WR', 'TE', 'OL', 'DL', 'LB', 'DB'];
-
-const FIRST_NAMES = [
-  'DeAndre', 'Marcus', 'Caleb', 'Trevor', 'Kenny', 'Jalen', 'Sauce', 'Tyreek',
-  'Justin', 'Patrick', 'Joe', 'Bryce', 'CJ', 'Drake', 'Brock', 'Aidan',
-  'Will', 'Devon', 'Jayden', 'Malik',
-];
-
-const LAST_NAMES = [
-  'Smith', 'Johnson', 'Williams', 'Jones', 'Brown', 'Davis', 'Miller',
-  'Wilson', 'Moore', 'Taylor', 'Anderson', 'Thomas', 'Jackson', 'White',
-  'Harris', 'Martin', 'Robinson', 'Clark', 'Lewis', 'Walker',
-];
+import { DRAFT_POSITIONS, FIRST_NAMES, LAST_NAMES, pickFrom, clamp } from './util';
 
 const POTENTIALS = ['A+', 'A', 'B+', 'B', 'C+', 'C', 'D'];
 const POTENTIAL_WEIGHTS = [0.03, 0.07, 0.15, 0.30, 0.20, 0.15, 0.10];
@@ -31,7 +18,7 @@ const STRENGTHS_BY_POSITION = {
 const COMPARISONS_BY_POSITION = {
   QB: ['Patrick Mahomes', 'Josh Allen', 'Lamar Jackson', 'Joe Burrow', 'Jalen Hurts'],
   RB: ['Derrick Henry', 'Saquon Barkley', 'Christian McCaffrey', 'Josh Jacobs', 'Breece Hall'],
-  WR: ["Ja'Marr Chase", 'Justin Jefferson', 'Tyreek Hill', 'CeeDee Lamb', 'Amon-Ra St. Brown'],
+  WR: ["Ja'Marr Chase", 'Justin Jefferson', 'Tyreek Hill', 'CeeDeE Lamb', 'Amon-Ra St. Brown'],
   TE: ['Travis Kelce', 'Mark Andrews', 'George Kittle', 'TJ Hockenson', 'Sam LaPorta'],
   OL: ['Penei Sewell', 'Rashawn Slater', 'Tristan Wirfs', 'Joe Alt', 'Paris Johnson Jr.'],
   DL: ['Myles Garrett', 'Micah Parsons', 'Chris Jones', 'Aidan Hutchinson', 'Jalen Carter'],
@@ -60,14 +47,6 @@ function pickWeightedPotential(random) {
     if (potRoll < cumulative) return POTENTIALS[i];
   }
   return 'C';
-}
-
-function pickFrom(list, random) {
-  return list[Math.floor(random() * list.length)];
-}
-
-function clamp(value, min, max) {
-  return Math.max(min, Math.min(max, value));
 }
 
 function potentialBand(potential) {

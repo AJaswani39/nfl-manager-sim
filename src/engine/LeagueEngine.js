@@ -4,17 +4,10 @@ import { ContractEngine } from './ContractEngine';
 import { DraftEngine } from './DraftEngine';
 import { FreeAgencyEngine } from './FreeAgencyEngine';
 import { TrainingEngine } from './TrainingEngine';
-
-// Helper to shuffle array
-const shuffle = (array, random = Math.random) => {
-  let currentIndex = array.length, randomIndex;
-  while (currentIndex != 0) {
-    randomIndex = Math.floor(random() * currentIndex);
-    currentIndex--;
-    [array[currentIndex], array[randomIndex]] = [array[randomIndex], array[currentIndex]];
-  }
-  return array;
-};
+import { serializeLeague, deserializeLeague } from './serialize';
+import { notify } from './leagueStore';
+import { shuffle, pickFrom, blankPlayerStats, getTeamById, DEPTH_POSITIONS, FIRST_NAMES, LAST_NAMES, PRACTICE_SQUAD_SIZE } from './util';
+import { PRESEASON_WEEKS, TOTAL_WEEKS, TRADE_DEADLINE_WEEK, SIMULATION_COUNT, INJURY_CHANCE } from './constants';
 
 export class LeagueEngine {
   constructor(seed = Date.now()) {
@@ -86,8 +79,8 @@ export class LeagueEngine {
 
   getTradeDeadlineInfo() {
     if (this.phase !== 'regular') return null;
-    const regWeek = this.currentWeek - 3;
-    const deadlineWeek = 8;
+    const regWeek = this.currentWeek - PRESEASON_WEEKS;
+    const deadlineWeek = TRADE_DEADLINE_WEEK;
     if (regWeek > deadlineWeek) return { passed: true, weeksAgo: regWeek - deadlineWeek };
     return { passed: false, weeksUntil: deadlineWeek - regWeek };
   }
@@ -206,13 +199,7 @@ export class LeagueEngine {
     const rosters = this.rosters || ROSTERS;
     Object.keys(rosters).forEach(teamId => {
       rosters[teamId].forEach(player => {
-        this.playerStats[player.id] = {
-          passingYards: 0, passingTDs: 0, passingAtt: 0, passingComp: 0,
-          rushingYards: 0, rushingTDs: 0, rushingAtt: 0,
-          receivingYards: 0, receivingTDs: 0, receptions: 0,
-          tackles: 0, sacks: 0, interceptions: 0,
-          defTDs: 0, fumblesRecovered: 0
-        };
+        this.playerStats[player.id] = blankPlayerStats();
       });
     });
   }
@@ -295,7 +282,7 @@ export class LeagueEngine {
 
   // DEPTH CHART SYSTEM
   initializeDepthCharts() {
-    const CHART_POSITIONS = ['QB', 'RB', 'WR', 'TE', 'OL', 'DL', 'LB', 'DB', 'K', 'P'];
+    const CHART_POSITIONS = DEPTH_POSITIONS;
     const rosters = this.rosters || ROSTERS;
     Object.keys(rosters).forEach(teamId => {
       this.depthCharts[teamId] = {};
@@ -309,7 +296,7 @@ export class LeagueEngine {
   }
 
   ensureDepthChart(teamId) {
-    const CHART_POSITIONS = ['QB', 'RB', 'WR', 'TE', 'OL', 'DL', 'LB', 'DB', 'K', 'P'];
+    const CHART_POSITIONS = DEPTH_POSITIONS;
     if (!this.depthCharts[teamId]) this.depthCharts[teamId] = {};
 
     const roster = this.rosters[teamId] || [];
@@ -689,7 +676,7 @@ export class LeagueEngine {
     // this.currentWeek is now weekIndex + 2 effectively? (starts at 1)
     // Let's track strictly by index
     
-    const totalRegWeeks = 3 + 17; // 20
+    const totalRegWeeks = TOTAL_WEEKS; // 20
     if (this.currentWeek > totalRegWeeks && this.phase === 'regular') {
        this.phase = 'playoffs'; // Transition state for UI
        this.startPlayoffs(); 
@@ -716,6 +703,7 @@ export class LeagueEngine {
     }
 
     this.generateWeeklyNews();
+    notify();
   }
 
   checkElimination() {
@@ -749,12 +737,7 @@ export class LeagueEngine {
 
   ensurePlayerStats(playerId) {
     if (!this.playerStats[playerId]) {
-      this.playerStats[playerId] = {
-        passingYards: 0, passingTDs: 0, passingAtt: 0, passingComp: 0,
-        rushingYards: 0, rushingTDs: 0, rushingAtt: 0,
-        receivingYards: 0, receivingTDs: 0, receptions: 0,
-        tackles: 0, sacks: 0, interceptions: 0
-      };
+      this.playerStats[playerId] = blankPlayerStats();
     }
   }
 
@@ -839,7 +822,7 @@ export class LeagueEngine {
     const roster = (this.rosters[teamId] || []).filter(player => !this.playerState[player.id]?.weeksOut);
     if (roster.length === 0) return null;
 
-    const chance = Math.max(0.01, 0.035 + this.getTrainingInjuryModifier(teamId));
+    const chance = Math.max(0.01, INJURY_CHANCE + this.getTrainingInjuryModifier(teamId));
     if (this._random() >= chance) return null;
 
     const player = roster[Math.floor(this._random() * roster.length)];
@@ -866,7 +849,7 @@ export class LeagueEngine {
     }
     this._cachedStandings = Object.keys(this.standings)
       .map(teamId => {
-        const team = TEAMS.find(t => t.id === teamId);
+        const team = getTeamById(teamId);
         return { ...team, ...this.standings[teamId] };
       })
       .sort((a, b) => b.w - a.w || (b.pf - b.pa) - (a.pf - a.pa));
@@ -909,13 +892,7 @@ export class LeagueEngine {
   // AWARDS SYSTEM
   getTeamSeasonStats(teamId) {
     const roster = this.rosters[teamId] || [];
-    const stats = {
-      passingYards: 0, passingTDs: 0, passingAtt: 0, passingComp: 0,
-      rushingYards: 0, rushingTDs: 0, rushingAtt: 0,
-      receivingYards: 0, receivingTDs: 0, receptions: 0,
-      tackles: 0, sacks: 0, interceptions: 0,
-      defTDs: 0, fumblesRecovered: 0,
-    };
+    const stats = blankPlayerStats();
     roster.forEach(player => {
       const ps = this.playerStats[player.id];
       if (!ps) return;
@@ -953,8 +930,8 @@ export class LeagueEngine {
   }
 
   getOpponentScoutingReport(userTeamId, opponentTeamId) {
-    const userTeam = TEAMS.find(t => t.id === userTeamId);
-    const opponent = TEAMS.find(t => t.id === opponentTeamId);
+    const userTeam = getTeamById(userTeamId);
+    const opponent = getTeamById(opponentTeamId);
     if (!userTeam || !opponent) return null;
 
     const opponentStats = this.getTeamSeasonStats(opponentTeamId);
@@ -1358,7 +1335,7 @@ export class LeagueEngine {
   }
 
   getTeamTiebreakProfile(teamId) {
-    const team = TEAMS.find(t => t.id === teamId);
+    const team = getTeamById(teamId);
     if (!team) return null;
     const records = this._getPlayedRegularRecords();
     const record = records[teamId] || {};
@@ -1444,7 +1421,7 @@ export class LeagueEngine {
   }
 
   _calculatePlayoffMilestoneOdds(cacheKey) {
-    const SIMULATIONS = 5000;
+    const SIMULATIONS = SIMULATION_COUNT;
     const totalRegularWeeks = 20;
     const baseOdds = {};
     TEAMS.forEach(team => { baseOdds[team.id] = this._emptyOdds(); });
@@ -1656,45 +1633,24 @@ export class LeagueEngine {
 
   // --- PRACTICE SQUAD ---
   initializePracticeSquads() {
-    const positions = ['QB', 'RB', 'WR', 'TE', 'OL', 'DL', 'LB', 'DB', 'K', 'P'];
-    const firstNames = ['Mike', 'Chris', 'David', 'Tyler', 'Brandon', 'Jason', 'Ryan', 'Kevin', 'Matt', 'Alex',
-                        'Jordan', 'Sam', 'Trey', 'Jalen', 'Darius', 'Marcus', 'Terrell', 'DeShawn', 'Malik', 'Andre'];
-    const lastNames = ['Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis', 'Rodriguez', 'Martinez', 'Anderson',
-                       'Thomas', 'Jackson', 'White', 'Harris', 'Thompson', 'Clark', 'Lewis', 'Robinson', 'Walker', 'Hall'];
 
     TEAMS.forEach(team => {
       if (this.practiceSquads[team.id] && this.practiceSquads[team.id].length > 0) return;
       this.practiceSquads[team.id] = [];
-      for (let i = 0; i < 10; i++) {
-        const pos = positions[Math.floor(this._random() * positions.length)];
-        const overall = 50 + Math.floor(this._random() * 23); // 50-72
-        const age = 22 + Math.floor(this._random() * 6); // 22-27
-        const player = {
-          id: `ps_${team.id}_${Date.now()}_${i}`,
-          name: `${firstNames[Math.floor(this._random() * firstNames.length)]} ${lastNames[Math.floor(this._random() * lastNames.length)]}`,
-          position: pos,
-          overall,
-          age,
-          stats: {},
-        };
-        this.practiceSquads[team.id].push(player);
-        this._indexAddPlayer(player, team.id);
+      for (let i = 0; i < PRACTICE_SQUAD_SIZE; i++) {
+        this.practiceSquads[team.id].push(this._generatePracticeSquadPlayer(team.id, i));
       }
     });
   }
 
   _generatePracticeSquadPlayer(teamId, index) {
-    const positions = ['QB', 'RB', 'WR', 'TE', 'OL', 'DL', 'LB', 'DB', 'K', 'P'];
-    const firstNames = ['Mike', 'Chris', 'David', 'Tyler', 'Brandon', 'Jason', 'Ryan', 'Kevin', 'Matt', 'Alex',
-                        'Jordan', 'Sam', 'Trey', 'Jalen', 'Darius', 'Marcus', 'Terrell', 'DeShawn', 'Malik', 'Andre'];
-    const lastNames = ['Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis', 'Rodriguez', 'Martinez', 'Anderson',
-                       'Thomas', 'Jackson', 'White', 'Harris', 'Thompson', 'Clark', 'Lewis', 'Robinson', 'Walker', 'Hall'];
+    const positions = DEPTH_POSITIONS;
     const pos = positions[Math.floor(this._random() * positions.length)];
-    const overall = 50 + Math.floor(this._random() * 23);
-    const age = 22 + Math.floor(this._random() * 6);
+    const overall = 50 + Math.floor(this._random() * 23); // 50-72
+    const age = 22 + Math.floor(this._random() * 6); // 22-27
     return {
       id: `ps_${teamId}_${Date.now()}_${index}`,
-      name: `${firstNames[Math.floor(this._random() * firstNames.length)]} ${lastNames[Math.floor(this._random() * lastNames.length)]}`,
+      name: `${pickFrom(FIRST_NAMES, () => this._random())} ${pickFrom(LAST_NAMES, () => this._random())}`,
       position: pos,
       overall,
       age,
@@ -1940,8 +1896,8 @@ export class LeagueEngine {
     this.ensureDepthChart(team2Id);
 
     // Generate news
-    const team1 = TEAMS.find(t => t.id === team1Id);
-    const team2 = TEAMS.find(t => t.id === team2Id);
+    const team1 = getTeamById(team1Id);
+    const team2 = getTeamById(team2Id);
     this.addNews(`TRADE: ${team1?.abbreviation || team1Id} and ${team2?.abbreviation || team2Id} complete multi-player deal.`, 'transaction');
   }
 
@@ -2140,101 +2096,23 @@ export class LeagueEngine {
       this.trainingFocus = {};
   }
 
-  // SAVE/LOAD GAME
+  // SAVE/LOAD GAME — delegates to the shared serialization module so the
+  // field list lives in one place (src/engine/serialize.js).
   getSaveData() {
-    return {
-      slotId: this.slotId,
-      weeks: this.weeks,
-      standings: this.standings,
-      playerStats: this.playerStats,
-      playerState: this.playerState,
-      news: this.news,
-      rosters: this.rosters,
-      currentWeek: this.currentWeek,
-      phase: this.phase,
-      userTeamId: this.userTeamId,
-      season: this.season || 1,
-      draftClass: this.draftClass,
-      draftOrder: this.draftOrder,
-      currentPickIndex: this.currentPickIndex,
-      draftScouting: this.draftScouting,
-      freeAgents: this.freeAgents,
-      coaches: this.coaches,
-      salaries: this.salaries,
-      teamCaps: this.teamCaps,
-      franchiseHistory: this.franchiseHistory,
-      superBowlWinner: this.superBowlWinner || null,
-      awards: this.awards || null,
-      depthCharts: this.depthCharts,
-      gamePlans: this.gamePlans,
-      draftHistory: this.draftHistory,
-      practiceSquads: this.practiceSquads,
-      injuredReserve: this.injuredReserve,
-      trainingFocus: this.trainingFocus,
-      randomSeed: this.randomSeed,
-      rngState: this._rngState,
-      playoffOddsCache: this.playoffOddsCache,
-    };
+    return serializeLeague(this);
   }
 
   loadSaveData(data) {
-    if (!data) return false;
-    this.weeks = data.weeks || [];
-    this.standings = data.standings || {};
-    this.playerStats = data.playerStats || {};
-    this.playerState = data.playerState || {};
-    this.news = data.news || [];
-    this.rosters = data.rosters || JSON.parse(JSON.stringify(ROSTERS));
-    this.currentWeek = data.currentWeek || 1;
-    this.phase = data.phase || 'preseason';
-    this.userTeamId = data.userTeamId;
-    this.season = data.season || 1;
-    this.slotId = data.slotId != null ? data.slotId : null;
-    this.draftClass = data.draftClass;
-    this.draftOrder = data.draftOrder;
-    this.currentPickIndex = data.currentPickIndex;
-    this.draftScouting = data.draftScouting || null;
-    this.freeAgents = data.freeAgents || [];
-    this.coaches = data.coaches || {};
-    this.salaries = data.salaries || {};
-    this.teamCaps = data.teamCaps || {};
-    this.franchiseHistory = data.franchiseHistory || [];
-    this.superBowlWinner = data.superBowlWinner || null;
-    this.awards = data.awards || null;
-    this.depthCharts = data.depthCharts || {};
-    this.gamePlans = data.gamePlans || {};
-    this.draftHistory = data.draftHistory || [];
-    this.practiceSquads = data.practiceSquads || {};
-    this.injuredReserve = data.injuredReserve || {};
-    this.trainingFocus = data.trainingFocus || {};
-    this.playoffOddsCache = data.playoffOddsCache || null;
-    this.setRandomSeed(data.randomSeed || Date.now());
-    if (Number.isFinite(data.rngState)) {
-      this._rngState = (data.rngState >>> 0) || 1;
-    }
-    this._standingsDirty = true;
-    this._cachedStandings = null;
-    this.rebuildPlayerIndex();
-    // Ensure all teams have depth charts (handles saves from before this feature)
-    Object.keys(this.rosters).forEach(teamId => {
-      if (!this.depthCharts[teamId]) this.ensureDepthChart(teamId);
-    });
-    // Ensure all teams have game plans (handles saves from before this feature)
-    if (!this.gamePlans || Object.keys(this.gamePlans).length === 0) {
-      this.initializeGamePlans();
-    }
-    // Ensure all teams have practice squads and IR (handles saves from before this feature)
-    this.initializePracticeSquads();
-    this.initializeInjuredReserve();
-    if (!this.trainingFocus) this.initializeTraining();
-    return true;
+    const ok = deserializeLeague(this, data);
+    if (ok) notify();
+    return ok;
   }
 
   resetGame() {
     this.invalidatePlayoffCache();
     // Restore original TEAMS ratings that may have been mutated by startNewSeason
     this._originalTeamRatings.forEach(orig => {
-      const team = TEAMS.find(t => t.id === orig.id);
+      const team = getTeamById(orig.id);
       if (team) {
         team.ratings.offense = orig.offense;
         team.ratings.defense = orig.defense;
@@ -2280,16 +2158,22 @@ export class LeagueEngine {
     this.initializePracticeSquads();
     this.initializeInjuredReserve();
     this.initializeTraining();
+    notify();
   }
 }
 
-Object.assign(
-  LeagueEngine.prototype,
-  ContractEngine,
-  DraftEngine,
-  FreeAgencyEngine,
-  TrainingEngine,
-);
+// Wire the standalone engine modules onto the league instance. Each engine is a
+// plain object of methods that rely on `this` being the league, so we attach them
+// here in one explicit place rather than polluting the class prototype. This keeps
+// the dependency surface visible and avoids silent mixin collisions.
+function attachEngines(instance) {
+  [ContractEngine, DraftEngine, FreeAgencyEngine, TrainingEngine].forEach((engine) => {
+    Object.keys(engine).forEach((name) => {
+      instance[name] = engine[name];
+    });
+  });
+}
 
 export const league = new LeagueEngine();
+attachEngines(league);
 league.generateSchedule();
