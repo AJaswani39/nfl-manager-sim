@@ -10,7 +10,7 @@ import { shuffle, pickFrom, blankPlayerStats, getTeamById } from './util';
 import { DEPTH_POSITIONS, FIRST_NAMES, LAST_NAMES, PRACTICE_SQUAD_SIZE } from './constants';
 import { PRESEASON_WEEKS, TOTAL_WEEKS, TRADE_DEADLINE_WEEK, SIMULATION_COUNT, INJURY_CHANCE } from './constants';
 
-export class LeagueEngine {
+class LeagueEngine {
   constructor(seed = Date.now()) {
     this.setRandomSeed(seed);
     // Snapshot original TEAMS ratings so resetGame() can fully restore them
@@ -106,27 +106,6 @@ export class LeagueEngine {
 
   setGamePlan(teamId, offense, defense) {
     this.gamePlans[teamId] = { offense, defense };
-  }
-
-  getPlayWeights(teamId) {
-    const plan = this.getGamePlan(teamId);
-    // Offense weights: [runInside, runOutside, passShort, passDeep, screen, playAction, draw]
-    const offenseWeights = {
-      run_heavy:  { run: 0.52, shortPass: 0.18, deepPass: 0.07, screen: 0.06, playAction: 0.12, draw: 0.05 },
-      balanced:   { run: 0.34, shortPass: 0.25, deepPass: 0.14, screen: 0.09, playAction: 0.11, draw: 0.07 },
-      pass_heavy: { run: 0.14, shortPass: 0.30, deepPass: 0.24, screen: 0.11, playAction: 0.12, draw: 0.09 },
-      spread:     { run: 0.17, shortPass: 0.24, deepPass: 0.15, screen: 0.19, playAction: 0.11, draw: 0.14 },
-    };
-    const defenseWeights = {
-      aggressive:   { runDef: 0.26, coverage: 0.32, blitz: 0.42 },
-      balanced:     { runDef: 0.34, coverage: 0.42, blitz: 0.24 },
-      conservative: { runDef: 0.32, coverage: 0.56, blitz: 0.12 },
-      blitz_heavy:  { runDef: 0.18, coverage: 0.25, blitz: 0.57 },
-    };
-    return {
-      offense: offenseWeights[plan.offense] || offenseWeights.balanced,
-      defense: defenseWeights[plan.defense] || defenseWeights.balanced,
-    };
   }
 
   getGamePlanScoreModifier(offTeamId, defTeamId) {
@@ -1333,19 +1312,6 @@ export class LeagueEngine {
       return 'e';
     }
     return '';
-  }
-
-  getTeamTiebreakProfile(teamId) {
-    const team = getTeamById(teamId);
-    if (!team) return null;
-    const records = this._getPlayedRegularRecords();
-    const record = records[teamId] || {};
-    return {
-      ...this._teamWithRecord(team, records),
-      gamesBack: this._getGamesBack(team, this._getPlayoffSeedsFromRecords(records)[team.conference] || [], records),
-      remainingSos: this._getRemainingSos(teamId),
-      h2h: record.h2h || {},
-    };
   }
 
   getPlayoffRace(options = {}) {

@@ -1,8 +1,8 @@
 import { ROSTERS } from '../data/rosters';
 
-export const SAVE_SCHEMA_VERSION = 2;
+const SAVE_SCHEMA_VERSION = 2;
 
-export const SAVE_FIELDS = [
+const SAVE_FIELDS = [
   'slotId',
   'weeks',
   'standings',
