@@ -1,4 +1,4 @@
-export const POSITIONS = {
+const POSITIONS = {
   QB: 'QB',
   RB: 'RB',
   WR: 'WR',

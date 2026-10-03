@@ -43,17 +43,6 @@ export const ContractEngine = {
     return cap.cap - cap.spent;
   },
 
-  getExpiringContracts(teamId) {
-    const roster = this.rosters[teamId] || [];
-    return roster.filter(player => {
-      const contract = this.getPlayerSalary(player.id);
-      return contract.years <= 1;
-    }).map(player => ({
-      ...player,
-      contract: this.getPlayerSalary(player.id),
-    }));
-  },
-
   extendContract(teamId, playerId, years, salary) {
     this.salaries[playerId] = { amount: salary, years };
     this.updateTeamSpending(teamId);
@@ -71,14 +60,6 @@ export const ContractEngine = {
       if (contract && contract.years > 0) {
         contract.years -= 1;
       }
-    });
-  },
-
-  getExpiredContractPlayers(teamId) {
-    const roster = this.rosters[teamId] || [];
-    return roster.filter(player => {
-      const contract = this.salaries[player.id];
-      return contract && contract.years <= 0;
     });
   },
 
